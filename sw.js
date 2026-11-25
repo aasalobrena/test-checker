@@ -1,5 +1,5 @@
 /* Service worker: permite usar la app sin conexión tras la primera visita. */
-const CACHE = 'corrector-v1.1.0';
+const CACHE = 'corrector-v1.1.1';
 const ASSETS = [
   './',
   'index.html',
@@ -42,7 +42,8 @@ self.addEventListener('fetch', (e) => {
     return;
   }
   e.respondWith(
-    fetch(req).then((resp) => {
+    // no-cache: siempre se pregunta al servidor si hay versión nueva
+    fetch(req, { cache: 'no-cache' }).then((resp) => {
       if (resp.ok) { const copy = resp.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
       return resp;
     }).catch(() => caches.match(req, { ignoreSearch: true }).then((r) => r || caches.match('index.html')))

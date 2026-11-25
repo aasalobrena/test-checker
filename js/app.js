@@ -1,7 +1,7 @@
 /* Corrector de exámenes – lógica de la aplicación */
 'use strict';
 
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.1.1';
 const PENALTY = 0.33; // cada fallo resta 0,33 (no un tercio)
 const NQ = 80;
 const LETTERS = 'ABCD';
@@ -669,6 +669,7 @@ function openEditor(k, copy) {
   $('#k-n').value = editor.n;
   $('#k-text').value = k ? keyToText(editor.answers, editor.n) : '';
   $('#key-editor-title').textContent = editor.id ? 'Editar solucionario' : 'Nuevo solucionario';
+  show('#btn-key-share', !!editor.id);
   show('#key-scan-msg', false);
   show('#keys-list-wrap', false);
   show('#key-editor', true);
@@ -769,8 +770,11 @@ function saveEditor() {
     setActiveKey(k.id);
   }
   saveKeys();
-  toast('Solucionario guardado');
   closeEditor();
+  const saved = getKey(editor.id) || getKey(state.activeKeyId);
+  const touch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  if (saved && !touch) openShare(saved, true); // en el ordenador: mostrar directamente el QR
+  else toast('Solucionario guardado');
 }
 
 function keyScanMsg(html, kind) {
@@ -940,8 +944,9 @@ function shareUrl(k) {
   return location.origin + location.pathname + '#k=' + b64urlEncode(JSON.stringify(payload));
 }
 let shareCurrent = '';
-function openShare(k) {
+function openShare(k, justSaved) {
   shareCurrent = shareUrl(k);
+  $('#share-title').textContent = justSaved ? '✓ Guardado. Pásalo al móvil' : 'Pasar al móvil';
   $('#share-name').textContent = k.name;
   const box = $('#share-qr');
   try {
@@ -1030,6 +1035,7 @@ function bind() {
   $('#btn-new-key').addEventListener('click', () => openEditor(null));
   $('#btn-key-cancel').addEventListener('click', closeEditor);
   $('#btn-key-save').addEventListener('click', saveEditor);
+  $('#btn-key-share').addEventListener('click', () => { const k = getKey(editor.id); if (k) openShare(k); });
   $('#k-text').addEventListener('input', onKeyTextInput);
   $('#k-n').addEventListener('change', onKeyNChange);
   $('#k-n').addEventListener('input', onKeyNChange);
@@ -1116,7 +1122,7 @@ function init() {
   engine.init();
   renderScanHeader();
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
-    navigator.serviceWorker.register('sw.js').catch(() => { /* sin modo offline */ });
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => { /* sin modo offline */ });
   }
 }
 
