@@ -1,5 +1,5 @@
 /* Service worker: permite usar la app sin conexión tras la primera visita. */
-const CACHE = 'corrector-v1.0.0';
+const CACHE = 'corrector-v1.0.1';
 const ASSETS = [
   './',
   'index.html',

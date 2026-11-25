@@ -181,7 +181,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); o
 .kq button.on { background: var(--primary); border-color: var(--primary); color: #fff; }
 .kq button.x { border-radius: 6px; }
 .kq button.x.on { background: var(--void); border-color: var(--void); }
-.sticky-bottom { position: sticky; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 8px); background: var(--surface); padding: 8px 0 0; }
+.sticky-bottom { position: sticky; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom)); background: var(--surface); margin: 12px -16px -16px; padding: 10px 16px 14px; border-top: 1px solid var(--border); border-radius: 0 0 var(--radius) var(--radius); box-shadow: 0 -6px 12px -8px rgba(0,0,0,.18); }
 
 /* Historial */
 .stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }

@@ -1,7 +1,7 @@
 /* Corrector de exámenes – lógica de la aplicación */
 'use strict';
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.0.1';
 const PENALTY = 0.33; // cada fallo resta 0,33 (no un tercio)
 const NQ = 80;
 const LETTERS = 'ABCD';
