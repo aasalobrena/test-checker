@@ -6,7 +6,7 @@ Aplicación web para **corregir automáticamente exámenes tipo test** (80 pregu
 
 ## Qué hace
 
-- **Solucionarios**: escribe las respuestas correctas (`ABCD…`, también vale pegar `1A 2C 3B…`), tócalas en una cuadrícula o **escanea una hoja rellenada con las soluciones**. Número de preguntas configurable (1–80) y preguntas **anuladas** (`X` o `-`). Puedes guardar varios solucionarios.
+- **Solucionarios**: escribe las respuestas correctas (`ABCD…`, también vale pegar `1A 2C 3B…`), tócalas en una cuadrícula o **escanea una hoja rellenada con las soluciones**. Número de preguntas configurable (1–80) y preguntas **anuladas** (`X` o `-`). Puedes guardar varios solucionarios y **pasarlos del ordenador al móvil con un código QR** (botón *Pasar al móvil*).
 - **Corrección**: escanea con la cámara (la lectura es automática al encuadrar la hoja) o sube una foto. Muestra aciertos, fallos, en blanco y la puntuación:
 
   **Puntos = aciertos − 0,33 × fallos**, sobre el número de preguntas (sin contar las anuladas).
@@ -15,6 +15,7 @@ Aplicación web para **corregir automáticamente exámenes tipo test** (80 pregu
 - **Revisión**: imagen de la hoja con aciertos (verde), fallos (rojo), respuesta correcta (anillo azul) y marcas **dudosas** (naranja). Tocando una burbuja se corrige la lectura.
 - **D.N.I.**: se lee de la hoja (editable).
 - **Historial** con estadísticas y exportación a **CSV** (Excel, separador `;`).
+- Los solucionarios y el historial se guardan en el navegador de cada dispositivo (`localStorage`); el enlace/QR de *Pasar al móvil* lleva el solucionario dentro del propio enlace.
 - Funciona **sin conexión** tras la primera visita y se puede instalar como app. Todo se procesa en el dispositivo: no se sube ninguna imagen.
 
 La plantilla de respuestas está en [`plantilla.pdf`](plantilla.pdf).

@@ -1,7 +1,7 @@
 /* Corrector de exámenes – lógica de la aplicación */
 'use strict';
 
-const APP_VERSION = '1.0.1';
+const APP_VERSION = '1.1.0';
 const PENALTY = 0.33; // cada fallo resta 0,33 (no un tercio)
 const NQ = 80;
 const LETTERS = 'ABCD';
@@ -651,6 +651,7 @@ function renderKeysList() {
       <div class="btn-row">
         <button class="btn primary" data-act="use">Corregir con este</button>
         <button class="btn" data-act="edit">Editar</button>
+        <button class="btn" data-act="share">Pasar al móvil</button>
         <button class="btn" data-act="dup">Duplicar</button>
         <button class="btn ghost danger" data-act="del">Borrar</button>
       </div></li>`;
@@ -917,6 +918,74 @@ function download(blob, name) {
 }
 
 // ---------------------------------------------------------------------------
+// Pasar un solucionario a otro dispositivo (enlace / código QR)
+// El solucionario viaja dentro del propio enlace (#k=...): no hay servidor.
+// ---------------------------------------------------------------------------
+function b64urlEncode(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  bytes.forEach((b) => { bin += String.fromCharCode(b); });
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function b64urlDecode(s) {
+  s = s.replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  const bin = atob(s);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+function shareUrl(k) {
+  const payload = { v: 1, name: k.name, code: k.code || '', n: k.n, a: k.answers.slice(0, k.n).join('') };
+  return location.origin + location.pathname + '#k=' + b64urlEncode(JSON.stringify(payload));
+}
+let shareCurrent = '';
+function openShare(k) {
+  shareCurrent = shareUrl(k);
+  $('#share-name').textContent = k.name;
+  const box = $('#share-qr');
+  try {
+    const qr = qrcode(0, 'M');
+    qr.addData(shareCurrent);
+    qr.make();
+    box.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4, scalable: true });
+  } catch (e) {
+    box.innerHTML = '<p class="small" style="color:#111">No se ha podido generar el código QR. Usa «Copiar enlace».</p>';
+  }
+  show('#share-native', !!navigator.share);
+  show('#share', true);
+}
+function closeShare() { show('#share', false); }
+
+function importFromHash() {
+  const m = /^#k=([A-Za-z0-9_-]+)$/.exec(location.hash);
+  if (!m) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  let d;
+  try { d = JSON.parse(b64urlDecode(m[1])); } catch (e) { d = null; }
+  const n = d && parseInt(d.n, 10);
+  const a = d && typeof d.a === 'string' ? d.a.toUpperCase() : '';
+  if (!d || !(n >= 1 && n <= NQ) || a.length !== n || !/^[ABCDX]+$/.test(a)) {
+    toast('El enlace del solucionario no es válido o está incompleto.', 4000);
+    return;
+  }
+  const answers = a.split('').concat(new Array(NQ - n).fill(''));
+  const name = String(d.name || 'Solucionario importado').slice(0, 120);
+  const code = String(d.code || '').slice(0, 60);
+  const same = state.keys.find((k) => k.n === n && k.name === name && k.answers.slice(0, n).join('') === a);
+  if (same) {
+    setActiveKey(same.id);
+    toast(`Ya tenías el solucionario «${name}». Queda seleccionado.`, 3500);
+    return;
+  }
+  const k = { id: uid(), name, code, n, answers, created: new Date().toISOString() };
+  state.keys.push(k);
+  saveKeys();
+  setActiveKey(k.id);
+  toast(`Solucionario «${name}» añadido y seleccionado.`, 3500);
+}
+
+// ---------------------------------------------------------------------------
 // Eventos
 // ---------------------------------------------------------------------------
 function bind() {
@@ -951,7 +1020,11 @@ function bind() {
     closeCamera();
     processFile(f, mode);
   });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && cam.running) closeCamera(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (cam.running) closeCamera();
+    closeShare();
+  });
 
   // Solucionarios
   $('#btn-new-key').addEventListener('click', () => openEditor(null));
@@ -971,6 +1044,7 @@ function bind() {
     if (b.dataset.act === 'use') { setActiveKey(id); gotoView('scan'); }
     else if (b.dataset.act === 'edit') openEditor(k);
     else if (b.dataset.act === 'dup') openEditor(k, true);
+    else if (b.dataset.act === 'share') openShare(k);
     else if (b.dataset.act === 'del') {
       if (!confirm(`¿Borrar el solucionario «${k.name}»? Los resultados guardados en el historial se conservan.`)) return;
       state.keys = state.keys.filter((x) => x.id !== id);
@@ -981,6 +1055,17 @@ function bind() {
   });
   $('#btn-export-keys').addEventListener('click', exportKeys);
   $('#import-keys').addEventListener('change', (e) => { importKeys(e.target.files[0]); e.target.value = ''; });
+
+  // Pasar al móvil
+  $('#share-close').addEventListener('click', closeShare);
+  $('#share').addEventListener('click', (e) => { if (e.target.id === 'share') closeShare(); });
+  $('#share-copy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(shareCurrent); toast('Enlace copiado'); } catch (e) { prompt('Copia este enlace:', shareCurrent); }
+  });
+  $('#share-native').addEventListener('click', () => {
+    navigator.share({ title: 'Solucionario', url: shareCurrent }).catch(() => {});
+  });
+  window.addEventListener('hashchange', () => { importFromHash(); gotoView('scan'); });
 
   // Historial
   $('#hist-filter').addEventListener('change', renderHistory);
@@ -1026,6 +1111,7 @@ function bind() {
 }
 
 function init() {
+  importFromHash();
   bind();
   engine.init();
   renderScanHeader();

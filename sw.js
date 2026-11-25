@@ -1,5 +1,5 @@
 /* Service worker: permite usar la app sin conexión tras la primera visita. */
-const CACHE = 'corrector-v1.0.1';
+const CACHE = 'corrector-v1.1.0';
 const ASSETS = [
   './',
   'index.html',
@@ -8,6 +8,7 @@ const ASSETS = [
   'js/omr.js',
   'js/worker.js',
   'vendor/opencv.js',
+  'vendor/qrcode.js',
   'manifest.webmanifest',
   'icons/icon.svg',
   'icons/icon-192.png',

@@ -240,3 +240,9 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); o
   background: #111827; color: #fff; padding: 10px 16px; border-radius: 10px; z-index: 200; font-weight: 600; max-width: calc(100% - 32px);
   box-shadow: 0 4px 16px rgba(0,0,0,.25);
 }
+
+/* Ventana modal (pasar al móvil) */
+.modal { position: fixed; inset: 0; z-index: 150; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.modal-box { background: var(--surface); color: var(--text); border-radius: var(--radius); padding: 20px; width: 100%; max-width: 420px; max-height: 100%; overflow: auto; box-shadow: 0 10px 40px rgba(0,0,0,.3); }
+.qr { background: #fff; border-radius: 10px; padding: 8px; margin: 8px auto; max-width: 300px; }
+.qr svg { display: block; width: 100%; height: auto; }
