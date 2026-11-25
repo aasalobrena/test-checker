@@ -17,7 +17,7 @@ Aplicación web para **corregir automáticamente exámenes tipo test** (80 pregu
 - **Revisión**: imagen de la hoja con aciertos (verde), fallos (rojo), respuesta correcta (anillo azul) y marcas **dudosas** (naranja). Tocando una burbuja se corrige la lectura.
 - **D.N.I.**: se lee de la hoja (editable).
 - **Historial** con estadísticas y exportación a **CSV** (Excel, separador `;`).
-- Los solucionarios y el historial se guardan en el navegador de cada dispositivo (`localStorage`); el enlace/QR de *Pasar al móvil* lleva el solucionario dentro del propio enlace.
+- **Sincronizar entre dispositivos** (botón *⇄ Sincronizar*): genera un enlace con solucionarios e historial (comprimidos en el `#` del enlace, que el navegador no envía a ningún servidor) y su QR. Al abrirlo en el otro dispositivo se fusionan los datos (altas, ediciones y borrados). Cada dispositivo guarda sus datos en el navegador (`localStorage`).
 - Funciona **sin conexión** tras la primera visita y se puede instalar como app. Todo se procesa en el dispositivo: no se sube ninguna imagen.
 
 Plantillas de respuestas: [`plantilla-5-opciones.pdf`](plantilla-5-opciones.pdf) (A–E) y [`plantilla.pdf`](plantilla.pdf) (A–D). La app lee las dos (la E está 16 pt a la derecha de la D).

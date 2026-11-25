@@ -245,8 +245,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); o
 /* Ventana modal (pasar al móvil) */
 .modal { position: fixed; inset: 0; z-index: 150; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .modal-box { background: var(--surface); color: var(--text); border-radius: var(--radius); padding: 20px; width: 100%; max-width: 420px; max-height: 100%; overflow: auto; box-shadow: 0 10px 40px rgba(0,0,0,.3); }
-.qr { background: #fff; border-radius: 10px; padding: 8px; margin: 8px auto; max-width: 300px; }
-.qr svg { display: block; width: 100%; height: auto; }
+.qr { background: #fff; border-radius: 10px; padding: 8px; margin: 8px auto; max-width: 360px; }
+.qr svg { display: block; width: 100%; height: auto; shape-rendering: crispEdges; image-rendering: pixelated; }
 
 /* Selector de tipo de examen */
 .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
@@ -256,3 +256,5 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); o
 .summary-line { margin-top: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 1rem; font-weight: 600; background: var(--bg); border-radius: 8px; padding: 4px 8px; display: inline-block; user-select: all; }
 .kq.extra { opacity: .55; }
 .big-count { font-size: 1.15rem; }
+.sync-steps { padding-left: 1.1em; margin: 8px 0; }
+.sync-steps li { margin-bottom: 4px; }

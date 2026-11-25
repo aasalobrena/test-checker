@@ -1,7 +1,7 @@
 /* Corrector de exámenes – lógica de la aplicación */
 'use strict';
 
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.4.0';
 const PENALTY = 0.33; // cada fallo resta 0,33 (no un tercio)
 const NQ = 80;
 const LETTERS = 'ABCDE';
@@ -39,12 +39,21 @@ const state = {
   history: store.get('tc.history', []),
   settings: Object.assign({ allowNegative: false }, store.get('tc.settings', {})),
   activeKeyId: store.get('tc.activeKey', null),
+  // ids borrados (para propagar los borrados al sincronizar)
+  deleted: Object.assign({ keys: [], history: [] }, store.get('tc.deleted', {})),
   current: null, // resultado que se está revisando
 };
 
 function saveKeys() { store.set('tc.keys', state.keys); }
 function saveHistory() { store.set('tc.history', state.history); }
 function saveSettings() { store.set('tc.settings', state.settings); }
+function saveDeleted() { store.set('tc.deleted', state.deleted); }
+function markDeleted(kind, ids) {
+  const set = new Set(state.deleted[kind]);
+  ids.forEach((id) => set.add(id));
+  state.deleted[kind] = Array.from(set).slice(-5000);
+  saveDeleted();
+}
 function setActiveKey(id) { state.activeKeyId = id; store.set('tc.activeKey', id); }
 function getKey(id) { return state.keys.find((k) => k.id === id) || null; }
 function activeKey() {
@@ -481,6 +490,7 @@ function saveCurrent(next) {
     const dupIdx = state.history.findIndex((h) => h.keyId === key.id && h.dni === dni);
     if (dupIdx >= 0) {
       if (!confirm(`Ya hay un resultado guardado para el D.N.I. ${dni} en este examen. ¿Quieres reemplazarlo?`)) return;
+      markDeleted('history', [state.history[dupIdx].id]);
       state.history.splice(dupIdx, 1);
     }
   }
@@ -1088,6 +1098,171 @@ function importFromHash() {
 }
 
 // ---------------------------------------------------------------------------
+// Sincronización entre dispositivos mediante un enlace (#s=...) y su QR.
+// Todo va comprimido en el fragmento (#) del enlace: no se envía a ningún servidor.
+// ---------------------------------------------------------------------------
+function bytesToB64url(bytes) {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function b64urlToBytes(s) {
+  s = s.replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+async function packSync(obj) {
+  const json = JSON.stringify(obj);
+  if (window.CompressionStream) {
+    const stream = new Blob([json]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+    return 'z' + bytesToB64url(new Uint8Array(await new Response(stream).arrayBuffer()));
+  }
+  return 'j' + bytesToB64url(new TextEncoder().encode(json));
+}
+async function unpackSync(s) {
+  const bytes = b64urlToBytes(s.slice(1));
+  if (s[0] === 'z') {
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return JSON.parse(await new Response(stream).text());
+  }
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+
+function syncPayload(withHistory) {
+  return {
+    v: 3,
+    k: state.keys.map((k) => ({
+      i: k.id, t: k.type || undefined, d: k.date || undefined, s: k.sub || undefined, m: k.type ? undefined : k.name,
+      a: k.answers.slice(0, k.n).join(''), c: k.created, u: k.updated || k.created,
+    })),
+    h: withHistory ? state.history.map((h) => Object.assign({}, h, { answers: (h.answers || []).join(',') })) : [],
+    x: { k: state.deleted.keys, h: withHistory ? state.deleted.history : [] },
+  };
+}
+
+const QR_MAX = 1400; // más largo que esto cuesta leerlo desde una pantalla
+let syncUrl = '';
+async function openSync() {
+  const base = location.origin + location.pathname + '#s=';
+  syncUrl = base + await packSync(syncPayload(true));
+  let qrUrl = syncUrl, note = '';
+  if (syncUrl.length > QR_MAX && state.history.length) {
+    qrUrl = base + await packSync(syncPayload(false));
+    note = 'El historial es demasiado grande para un QR: el código lleva solo los solucionarios. El enlace (Compartir / Copiar) lo lleva todo.';
+  }
+  $('#sync-what').textContent = `Contiene ${state.keys.length} solucionario${state.keys.length === 1 ? '' : 's'} y ${state.history.length} resultado${state.history.length === 1 ? '' : 's'}.`;
+  const box = $('#sync-qr');
+  if (qrUrl.length <= 2900) {
+    try {
+      const qr = qrcode(0, 'L');
+      qr.addData(qrUrl);
+      qr.make();
+      box.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4, scalable: true });
+    } catch (e) {
+      box.innerHTML = '';
+      note = 'No se ha podido generar el código QR: usa el enlace.';
+    }
+  } else {
+    box.innerHTML = '';
+    note = 'Hay demasiados datos para un código QR: usa Compartir o Copiar enlace.';
+  }
+  show(box, !!box.innerHTML);
+  $('#sync-qr-note').textContent = note;
+  show('#sync-qr-note', !!note);
+  show('#sync-share', !!navigator.share);
+  show('#sync', true);
+}
+function closeSync() { show('#sync', false); }
+
+function keyFromSync(r) {
+  const n = String(r.a || '').length;
+  if (!(n >= 1 && n <= NQ) || !/^[ABCDEX]+$/.test(r.a)) return null;
+  const k = { id: String(r.i), n, answers: r.a.split('').concat(new Array(NQ - n).fill('')), created: r.c || new Date().toISOString(), updated: r.u || r.c };
+  if (r.t && TYPES[r.t]) { k.type = r.t; k.date = r.d || todayISO(); k.sub = r.s || 1; } else k.name = String(r.m || 'Solucionario');
+  return k;
+}
+function sameContent(a, b) {
+  return a.n === b.n && a.answers.slice(0, a.n).join('') === b.answers.slice(0, b.n).join('') &&
+    (a.type ? a.type === b.type && a.date === b.date : a.name === b.name);
+}
+
+function mergeSync(d) {
+  const r = { keysNew: 0, keysUpd: 0, histNew: 0, histUpd: 0, removed: 0 };
+  const delK = new Set((d.x && d.x.k) || []), delH = new Set((d.x && d.x.h) || []);
+  // borrados que vienen del otro dispositivo
+  const nk0 = state.keys.length, nh0 = state.history.length;
+  state.keys = state.keys.filter((k) => !delK.has(k.id));
+  state.history = state.history.filter((h) => !delH.has(h.id));
+  r.removed = nk0 - state.keys.length + nh0 - state.history.length;
+  markDeleted('keys', delK); markDeleted('history', delH);
+  const myDelK = new Set(state.deleted.keys), myDelH = new Set(state.deleted.history);
+  // solucionarios
+  const idMap = {};
+  for (const raw of d.k || []) {
+    const k = keyFromSync(raw);
+    if (!k || myDelK.has(k.id)) continue;
+    const mine = getKey(k.id);
+    if (mine) {
+      if ((k.updated || '') > (mine.updated || mine.created || '')) {
+        Object.assign(mine, k);
+        if (mine.type) {
+          const clash = state.keys.some((x) => x !== mine && x.type === mine.type && x.date === mine.date && x.sub === mine.sub);
+          if (clash) mine.sub = nextSub(mine.type, mine.date, mine.id);
+        }
+        r.keysUpd++;
+      }
+      continue;
+    }
+    const twin = state.keys.find((x) => sameContent(x, k)); // el mismo examen, pasado antes por QR
+    if (twin) { idMap[k.id] = twin.id; continue; }
+    if (k.type && state.keys.some((x) => x.type === k.type && x.date === k.date && x.sub === k.sub)) k.sub = nextSub(k.type, k.date);
+    state.keys.push(k);
+    r.keysNew++;
+  }
+  // historial
+  for (const raw of d.h || []) {
+    if (!raw || !raw.id || myDelH.has(raw.id)) continue;
+    const h = Object.assign({}, raw, { answers: typeof raw.answers === 'string' ? (raw.answers ? raw.answers.split(',') : []) : (raw.answers || []) });
+    if (idMap[h.keyId]) h.keyId = idMap[h.keyId];
+    const i = state.history.findIndex((x) => x.id === h.id);
+    if (i >= 0) {
+      if ((h.updated || '') > (state.history[i].updated || '')) { state.history[i] = h; r.histUpd++; }
+      continue;
+    }
+    state.history.push(h);
+    r.histNew++;
+  }
+  state.history.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  state.history.forEach((h) => { const hk = getKey(h.keyId); if (hk) { h.keyName = keyLabel(hk); h.keyType = hk.type || ''; h.keyDate = hk.date || ''; } });
+  saveKeys(); saveHistory();
+  if (!getKey(state.activeKeyId) && state.keys.length) setActiveKey(state.keys[0].id);
+  return r;
+}
+
+async function importSyncFromHash() {
+  const m = /^#s=([A-Za-z0-9_-]+)$/.exec(location.hash);
+  if (!m) return false;
+  history.replaceState(null, '', location.pathname + location.search);
+  let d;
+  try { d = await unpackSync(m[1]); } catch (e) { d = null; }
+  if (!d || d.v !== 3) { toast('El enlace de sincronización no es válido o está incompleto.', 4000); return true; }
+  const r = mergeSync(d);
+  const parts = [];
+  if (r.keysNew) parts.push(`${r.keysNew} solucionario${r.keysNew > 1 ? 's' : ''} nuevo${r.keysNew > 1 ? 's' : ''}`);
+  if (r.histNew) parts.push(`${r.histNew} resultado${r.histNew > 1 ? 's' : ''} nuevo${r.histNew > 1 ? 's' : ''}`);
+  if (r.keysUpd + r.histUpd) parts.push(`${r.keysUpd + r.histUpd} actualizado${r.keysUpd + r.histUpd > 1 ? 's' : ''}`);
+  if (r.removed) parts.push(`${r.removed} borrado${r.removed > 1 ? 's' : ''}`);
+  toast(parts.length ? 'Sincronizado: ' + parts.join(', ') + '.' : 'Sincronizado: ya estaba todo al día.', 4500);
+  renderScanHeader();
+  if ($('#view-keys').classList.contains('active')) renderKeysList();
+  if ($('#view-history').classList.contains('active')) renderHistory();
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Eventos
 // ---------------------------------------------------------------------------
 function bind() {
@@ -1126,6 +1301,7 @@ function bind() {
     if (e.key !== 'Escape') return;
     if (cam.running) closeCamera();
     closeShare();
+    closeSync();
   });
 
   // Solucionarios
@@ -1156,6 +1332,7 @@ function bind() {
     else if (b.dataset.act === 'del') {
       if (!confirm(`¿Borrar el solucionario «${keyLabel(k)}»? Los resultados guardados en el historial se conservan.`)) return;
       state.keys = state.keys.filter((x) => x.id !== id);
+      markDeleted('keys', [id]);
       if (state.activeKeyId === id) setActiveKey(state.keys[0] ? state.keys[0].id : null);
       saveKeys();
       renderKeysList();
@@ -1173,7 +1350,21 @@ function bind() {
   $('#share-native').addEventListener('click', () => {
     navigator.share({ title: 'Solucionario', url: shareCurrent }).catch(() => {});
   });
-  window.addEventListener('hashchange', () => { importFromHash(); gotoView('scan'); });
+  window.addEventListener('hashchange', async () => {
+    if (!/^#[ks]=/.test(location.hash)) return;
+    closeSync(); closeShare();
+    if (await importSyncFromHash()) return;
+    importFromHash(); gotoView('scan');
+  });
+  $$('[data-sync]').forEach((b) => b.addEventListener('click', openSync));
+  $('#sync-close').addEventListener('click', closeSync);
+  $('#sync').addEventListener('click', (e) => { if (e.target.id === 'sync') closeSync(); });
+  $('#sync-copy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(syncUrl); toast('Enlace copiado'); } catch (e) { prompt('Copia este enlace:', syncUrl); }
+  });
+  $('#sync-share').addEventListener('click', () => {
+    navigator.share({ title: 'Corrector de exámenes: sincronizar', url: syncUrl }).catch(() => {});
+  });
 
   // Historial
   $('#hist-filter').addEventListener('change', renderHistory);
@@ -1185,6 +1376,7 @@ function bind() {
     if (!confirm(f ? `¿Borrar los ${rows.length} resultados de este examen?` : `¿Borrar los ${rows.length} resultados del historial?`)) return;
     const ids = new Set(rows.map((h) => h.id));
     state.history = state.history.filter((h) => !ids.has(h.id));
+    markDeleted('history', Array.from(ids));
     saveHistory();
     renderHistory();
   });
@@ -1197,10 +1389,12 @@ function bind() {
     if (b.dataset.act === 'del') {
       if (!confirm('¿Borrar este resultado?')) return;
       state.history = state.history.filter((x) => x.id !== id);
+      markDeleted('history', [id]);
     } else if (b.dataset.act === 'name') {
       const v = prompt('Nombre del alumno/a', h.name || '');
       if (v === null) return;
       h.name = v.trim();
+      h.updated = new Date().toISOString();
       const dni = prompt('D.N.I.', h.dni || '');
       if (dni !== null) h.dni = dni.trim().toUpperCase();
     }
@@ -1221,6 +1415,7 @@ function bind() {
 function init() {
   importFromHash();
   bind();
+  importSyncFromHash();
   engine.init();
   renderScanHeader();
   if ('serviceWorker' in navigator && location.protocol === 'https:') {

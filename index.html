@@ -104,8 +104,13 @@
         <ul id="keys-list" class="list"></ul>
         <p id="keys-empty" class="muted center hidden">No hay solucionarios. Pulsa <strong>+ Nuevo</strong> para crear el primero.</p>
         <div class="card">
+          <h3>Sincronizar con otro dispositivo</h3>
+          <p class="muted small">Genera un enlace (y su código QR) con tus solucionarios y el historial. Ábrelo en el otro dispositivo y se fusionan los datos.</p>
+          <div class="btn-row"><button class="btn primary" data-sync>⇄ Sincronizar</button></div>
+        </div>
+        <div class="card">
           <h3>Copia de seguridad</h3>
-          <p class="muted small">Exporta tus solucionarios a un archivo para guardarlos o pasarlos a otro dispositivo.</p>
+          <p class="muted small">Exporta tus solucionarios a un archivo para guardarlos.</p>
           <div class="btn-row">
             <button id="btn-export-keys" class="btn">Exportar</button>
             <label class="btn">Importar<input id="import-keys" type="file" accept="application/json,.json" hidden></label>
@@ -166,6 +171,7 @@
       <p id="hist-empty" class="muted center hidden">Aún no hay resultados guardados.</p>
       <div class="btn-row">
         <button id="btn-export-csv" class="btn primary">Exportar CSV (Excel)</button>
+        <button class="btn" data-sync>⇄ Sincronizar con otro dispositivo</button>
         <button id="btn-clear-hist" class="btn danger ghost">Borrar historial</button>
       </div>
     </section>
@@ -198,6 +204,8 @@
           <li>Hoja plana, buena luz y sin sombras fuertes. No hace falta que esté recta.</li>
           <li>Las marcas deben rellenar el círculo con bolígrafo azul o negro. Una X que sobresale del círculo anula la respuesta. Las cruces pequeñas dentro del círculo, las rayas o las marcas muy pequeñas se señalan como <span class="tag doubt">dudosas</span> para que las revises.</li>
         </ul>
+        <h3>Varios dispositivos</h3>
+        <p>Pulsa <b>⇄ Sincronizar</b> (en Solucionarios o Historial): se crea un enlace con tus solucionarios y resultados. Escanea su QR con el móvil o envíate el enlace y ábrelo en el ordenador. Al abrirlo, los datos se fusionan con los que ya haya. Repite cuando quieras pasar los cambios de un lado a otro.</p>
         <h3>Privacidad</h3>
         <p>Todo funciona en tu navegador. Las imágenes no salen del dispositivo y los solucionarios y el historial se guardan solo en este navegador (usa <i>Exportar</i> para hacer copias). El enlace de <i>Pasar al móvil</i> lleva las respuestas del solucionario dentro del propio enlace: compártelo solo con quien deba tenerlas.</p>
         <p class="muted small" id="app-version"></p>
@@ -243,6 +251,26 @@
         <button id="share-copy" class="btn">Copiar enlace</button>
         <button id="share-native" class="btn hidden">Compartir…</button>
         <button id="share-close" class="btn primary">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sincronizar todo entre dispositivos -->
+  <div id="sync" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="sync-title">
+    <div class="modal-box">
+      <h2 id="sync-title">Sincronizar con otro dispositivo</h2>
+      <p class="muted small" id="sync-what"></p>
+      <div id="sync-qr" class="qr"></div>
+      <p class="muted small" id="sync-qr-note"></p>
+      <ul class="muted small sync-steps">
+        <li><b>Al móvil:</b> escanea el código con la cámara del móvil.</li>
+        <li><b>Al ordenador:</b> pulsa <i>Compartir…</i> o <i>Copiar enlace</i>, envíatelo (correo, WhatsApp…) y ábrelo en el ordenador.</li>
+      </ul>
+      <p class="muted small">Los datos se fusionan: se añade lo que falte, se actualiza lo editado y se aplican los borrados. El enlace contiene los D.N.I. del historial: envíatelo solo a ti.</p>
+      <div class="btn-row">
+        <button id="sync-share" class="btn primary hidden">Compartir…</button>
+        <button id="sync-copy" class="btn">Copiar enlace</button>
+        <button id="sync-close" class="btn">Cerrar</button>
       </div>
     </div>
   </div>
