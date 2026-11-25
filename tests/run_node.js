@@ -18,6 +18,7 @@ const OMR = require('../js/omr.js');
 (async () => {
   const cv = await cvPromise;
   const files = fs.readdirSync(dir).filter(f => /\.(jpe?g)$/i.test(f)).sort();
+  let silent = 0;
   const crossFills = [], crossSec = [], markSec = [];
   let crossMissed = 0, tot = 0, wrongQ = 0, failed = 0, dniOk = 0, dniN = 0, doubt = 0;
   const allBlankFills = [], allMarkFills = [];
@@ -32,13 +33,14 @@ const OMR = require('../js/omr.js');
       if (a.doubtful) doubt++;
       const t = truth.answers[i];
       if (t.startsWith('x')) { // cruz: aceptable si se marca como dudosa
-        crossFills.push(a.fills['ABCD'.indexOf(t[1])] - res.debug.base); crossSec.push([a.fills['ABCD'.indexOf(t[1])] - res.debug.base, a.sec['ABCD'.indexOf(t[1])]]);
+        crossFills.push(a.fills['ABCDE'.indexOf(t[1])] - res.debug.base); crossSec.push([a.fills['ABCDE'.indexOf(t[1])] - res.debug.base, a.sec['ABCDE'.indexOf(t[1])]]);
         if (!a.doubtful && a.value !== '') { wrongQ++; bad.push(`${i + 1}:cruz${t[1]}->${a.value} sin duda`); }
         else if (!a.doubtful) crossMissed++;
         return;
       }
+      if (a.value !== truth.answers[i] && !a.doubtful) silent++;
       if (a.value !== truth.answers[i]) { wrongQ++; bad.push(`${i + 1}:${truth.answers[i] || '-'}->${a.value || '-'} [${a.fills.join(',')}]`); }
-      a.fills.forEach((v, o) => { (truth.answers[i].includes('ABCD'[o]) ? allMarkFills : allBlankFills).push(v - res.debug.base); if (truth.answers[i].includes('ABCD'[o])) markSec.push([v - res.debug.base, a.sec[o]]); });
+      a.fills.forEach((v, o) => { (truth.answers[i].includes('ABCDE'[o]) ? allMarkFills : allBlankFills).push(v - res.debug.base); if (truth.answers[i].includes('ABCDE'[o])) markSec.push([v - res.debug.base, a.sec[o]]); });
     });
     dniN++;
     if (res.dni.value === truth.dni) dniOk++;
@@ -48,7 +50,7 @@ const OMR = require('../js/omr.js');
   }
   allBlankFills.sort((a, b) => b - a); allMarkFills.sort((a, b) => a - b);
   console.log('cruces no señaladas:', crossMissed, 'rellenos de cruces:', crossFills.sort((a, b) => a - b).map(v => v.toFixed(2)).join(' '));
-  console.log(`\nHojas: ${files.length}, fallos de detección: ${failed}, preguntas mal: ${wrongQ}/${tot}, dudosas: ${doubt}, DNI ok: ${dniOk}/${dniN}`);
+  console.log(`\nHojas: ${files.length}, fallos de detección: ${failed}, preguntas mal: ${wrongQ}/${tot} (sin señalar como dudosas: ${silent}), dudosas: ${doubt}, DNI ok: ${dniOk}/${dniN}`);
   console.log('max vacías:', allBlankFills.slice(0, 5).map(v => v.toFixed(3)).join(' '), ' min marcadas:', allMarkFills.slice(0, 5).map(v => v.toFixed(3)).join(' '));
   if (process.env.SECSTATS) {
     const f = (arr) => arr.filter(([v]) => v >= 0.3).map(([, s]) => s).sort((a, b) => a - b);

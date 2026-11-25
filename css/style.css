@@ -145,11 +145,12 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); o
 .lg.bad { background: var(--bad); }
 .lg.key { border: 2px solid var(--key); }
 .lg.doubt { border: 2px dashed var(--doubt); }
+.lg-x { color: #475569; margin-right: 3px; }
 .tag { padding: 0 .4em; border-radius: 4px; font-size: .9em; }
 .tag.doubt { background: #fef3c7; color: #92400e; }
 
 .answers-details summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
-.answers-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin-top: 8px; }
+.answers-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px; margin-top: 8px; }
 .ans { display: flex; align-items: center; gap: 4px; padding: 4px 6px; border-radius: 8px; background: var(--bg); font-size: .85rem; }
 .ans .qn { width: 26px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
 .ans button { width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--muted); background: transparent; color: var(--text); font-size: .75rem; font-weight: 700; padding: 0; cursor: pointer; }
@@ -173,7 +174,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); o
 .status { font-weight: 600; margin: 8px 0; }
 .status.ok { color: var(--ok); }
 .status.bad { color: var(--bad); }
-.key-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 6px; }
+.key-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(198px, 1fr)); gap: 6px; }
 .kq { display: flex; align-items: center; gap: 3px; padding: 3px 4px; border-radius: 8px; background: var(--bg); }
 .kq.missing { outline: 1.5px solid var(--bad); }
 .kq .qn { width: 24px; font-weight: 700; font-size: .8rem; text-align: right; font-variant-numeric: tabular-nums; margin-right: 2px; }

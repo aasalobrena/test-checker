@@ -15,6 +15,9 @@ import sys
 import cv2
 
 HARD = os.environ.get("HARD") == "1"
+NOPT = int(os.environ.get("OPTS", "4"))        # 4 (A-D) o 5 (A-E, usar plantilla-5-opciones.pdf)
+CANCEL = os.environ.get("CANCEL") == "1"        # añadir respuestas tachadas con una X que sobresale
+LET = "ABCDE"
 import numpy as np
 import pymupdf
 
@@ -44,6 +47,16 @@ def draw_mark(img, x, y, s, kind, color, rng):
             a = (int(x + ox - half), int(y + oy + t))
             b = (int(x + ox + half), int(y + oy + t + rng.uniform(-1, 1) * s))
             cv2.line(img, a, b, color, max(1, int(1.1 * s)), cv2.LINE_AA)
+    elif kind == "cancel":
+        # X grande que sobresale del círculo (respuesta anulada por el alumno)
+        th = max(1, int(rng.uniform(0.8, 1.3) * s))
+        rot = math.radians(rng.uniform(-18, 18))
+        for base in (math.pi / 4, 3 * math.pi / 4):
+            a = base + rot + math.radians(rng.uniform(-8, 8))
+            l1, l2 = rng.uniform(8.5, 11.5) * s, rng.uniform(8.5, 11.5) * s
+            p1 = (int(x + l1 * math.cos(a)), int(y + l1 * math.sin(a)))
+            p2 = (int(x - l2 * math.cos(a)), int(y - l2 * math.sin(a)))
+            cv2.line(img, p1, p2, color, th, cv2.LINE_AA)
     elif kind == "cross":
         d = 4.5 * s
         th = max(1, int(0.9 * s))
@@ -66,22 +79,30 @@ def render_sheet(pdf, rng, dpi):
         if u < 0.10:
             marks = []
         elif u < 0.13:
-            marks = sorted(rng.sample(range(4), 2))
+            marks = sorted(rng.sample(range(NOPT), 2))
         else:
-            marks = [rng.randrange(4)]
+            marks = [rng.randrange(NOPT)]
         kinds = []
         for o in marks:
             kind = "fill" if rng.random() < 0.85 else "partial"
             kinds.append(kind)
             x, y = bubble(q, o)
             draw_mark(img, x * s, y * s, s, kind, ink, rng)
-        truth.append("".join("ABCD"[o] for o in marks))
+        if CANCEL and rng.random() < (0.5 if not marks else 0.15):
+            # el alumno rellenó una burbuja y luego la tachó (si la pregunta no tenía
+            # otra marca, queda en blanco)
+            free = [o for o in range(NOPT) if o not in marks]
+            o = rng.choice(free)
+            x, y = bubble(q, o)
+            draw_mark(img, x * s, y * s, s, "fill", ink, rng)
+            draw_mark(img, x * s, y * s, s, "cancel", ink, rng)
+        truth.append("".join(LET[o] for o in marks))
         if HARD and not marks and rng.random() < 0.5:
             # cruz ("así no marque"): debe salir como dudosa
-            o = rng.randrange(4)
+            o = rng.randrange(NOPT)
             x, y = bubble(q, o)
             draw_mark(img, x * s, y * s, s, "cross", ink, rng)
-            truth[-1] = "x" + "ABCD"[o]
+            truth[-1] = "x" + LET[o]
     dni = "".join(str(rng.randrange(10)) for _ in range(8))
     if rng.random() < 0.25:
         dni = dni[:7]  # DNI de 7 cifras, última columna vacía

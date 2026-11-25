@@ -36,9 +36,10 @@
     bubbleR: 6,
     dni: { x0: 449.78, dx: 15, y0: 66, dy: 14.2, cols: 8, r: 4.8 },
     nQuestions: 80,
-    nOptions: 4,
+    nOptions: 5,       // A-E (la E puede no estar impresa en la plantilla de 4 opciones)
   };
 
+  const LETTERS = 'ABCDE';
   function bubblePt(q, o) {
     const c = Math.floor(q / 20), r = q % 20;
     return [T.colX[c] + o * T.optDx, T.rowY[r]];
@@ -440,7 +441,7 @@
       let [ox, oy] = resid[q];
       if (Math.hypot(ox - mx, oy - my) > 0.8 * S) { ox = mx; oy = my; }
       const row = [];
-      for (let o = 0; o < 4; o++) {
+      for (let o = 0; o < T.nOptions; o++) {
         const [x, y] = bubblePt(q, o);
         const [u, v] = applyH(Hc, x * S, y * S);
         row.push([u + ox, v + oy]);
@@ -486,18 +487,21 @@
     const inks = pos.map(row => row.map(([u, v]) => diskInk(D, u, v, 4.4 * S, inkT)));
     const fills = inks.map(row => row.map(k => k.frac));
     // calidad de alineación por fila
-    const rowQ = pos.map(row => row.reduce((acc, [u, v]) => acc + ringScore(Ds, u, v, R, ROUT), 0) / 4);
+    const rowQ = pos.map(row => row.slice(0, 4).reduce((acc, [u, v]) => acc + ringScore(Ds, u, v, R, ROUT), 0) / 4);
+    // X que sobresale del círculo = respuesta anulada por el alumno (nº de brazos)
+    const cancels = pos.map(row => row.map((p, o) => crossedOut(D, row, o, S, inkT)));
+    if (opt.debugCancel) opt.debugCancel.push(...pos.map(row => row.map((p, o) => { const d = {}; crossedOut(D, row, o, S, inkT, d); return d; })));
     const dniFills = dniPos.map(col => col.map(([u, v]) => diskInk(D, u, v, 3.3 * S, inkT).frac));
-    const allF = [].concat(...fills);
+    const allF = [].concat(...fills.map(row => row.slice(0, 4))); // la E puede no estar impresa
     const base = median(allF);
     const dniBase = median([].concat(...dniFills));
 
-    const answers = fills.map((row, i) => classify(row, base, opt, inks[i].map(k => k.minSec), rowQ[i]));
+    const answers = fills.map((row, i) => classify(row, base, opt, inks[i].map(k => k.minSec), rowQ[i], cancels[i]));
     const dni = readDni(dniFills, dniBase, opt);
 
     // calidad: contraste medio de anillos con la alineación final
     let q = 0;
-    for (const row of pos) for (const [u, v] of row) q += ringScore(Ds, u, v, R, ROUT);
+    for (const row of pos) for (const [u, v] of row.slice(0, 4)) q += ringScore(Ds, u, v, R, ROUT);
     q /= 320;
 
     if (q < opt.minQuality) {
@@ -511,7 +515,7 @@
     const k = opt.displayS / S;
     return {
       ok: true,
-      answers, // [{value:'A'|'AB'|'', marks:[bool], fills:[..], doubtful}]
+      answers, // [{value:'A'|'AB'|'', marks:[bool x5], cancelled:[bool x5], fills:[..], doubtful}]
       dni,
       positions: pos.map(row => row.map(([u, v]) => [u * k, v * k])),
       dniPositions: dniPos.map(col => col.map(([u, v]) => [u * k, v * k])),
@@ -531,22 +535,78 @@
     return out;
   }
 
-  function classify(row, base, opt, minSec, rowQ) {
+  function classify(row, base, opt, minSec, rowQ, cancelled) {
+    const n = row.length;
+    const arms = cancelled || new Array(n).fill(0);
+    const canc = arms.map(a => a >= 3);
     const d = row.map(v => v - base);
-    // marca clara: suficiente tinta y repartida por todo el círculo
-    const marks = d.map((v, i) => v >= opt.markT && (!minSec || minSec[i] >= opt.minSec));
-    const weak = d.map((v, i) => v >= opt.weakT && !marks[i]);
+    // marca clara: suficiente tinta y repartida por todo el círculo (y no tachada)
+    const marks = d.map((v, i) => !canc[i] && v >= opt.markT && (!minSec || minSec[i] >= opt.minSec));
+    const weak = d.map((v, i) => !canc[i] && v >= opt.weakT && !marks[i]);
     let doubtful = weak.some(Boolean);
+    // relleno con 2 "brazos" saliendo: puede ser una X poco marcada
+    if (d.some((v, i) => arms[i] === 2 && v >= opt.markT)) doubtful = true;
     let sel = marks.slice();
     if (!marks.some(Boolean) && weak.some(Boolean)) {
-      // sin marcas claras: se propone la más oscura, pero queda como dudosa
-      const idx = d.indexOf(Math.max(...d));
-      sel = [false, false, false, false];
+      // sin marcas claras: se propone la más oscura (no tachada), pero queda como dudosa
+      let idx = -1;
+      d.forEach((v, i) => { if (weak[i] && (idx < 0 || v > d[idx])) idx = i; });
+      sel = new Array(n).fill(false);
       sel[idx] = true;
     }
     if (rowQ !== undefined && rowQ < opt.rowQ) doubtful = true; // fila mal alineada o ilegible
-    const value = sel.map((m, i) => (m ? 'ABCD'[i] : '')).join('');
-    return { value, marks: sel, fills: row.map(v => Math.round(v * 1000) / 1000), sec: minSec ? minSec.map(v => Math.round(v * 100) / 100) : null, doubtful };
+    const value = sel.map((m, i) => (m ? LETTERS[i] : '')).join('');
+    return {
+      value, marks: sel, cancelled: canc.slice(), fills: row.map(v => Math.round(v * 1000) / 1000),
+      sec: minSec ? minSec.map(v => Math.round(v * 100) / 100) : null, doubtful,
+    };
+  }
+
+  /*
+   * ¿Hay una X (o raya) que sobresale del círculo? Se mira la tinta en un anillo
+   * justo por fuera de la burbuja (7,9-10,4 pt del centro), descartando la zona de
+   * las burbujas vecinas, y se cuentan los "brazos" (grupos de sectores con tinta).
+   * Una X da 4 brazos (se exigen al menos 3). Un relleno algo desbordado, 0-2.
+   */
+  // Devuelve el número de brazos: >= 3 es una X (anulada); 2 queda como dudosa.
+  function crossedOut(D, row, o, S, inkT, dbg) {
+    const [cx, cy] = row[o];
+    const r0 = 7.9 * S, r1 = 10.4 * S, ex = 7.6 * S;
+    const armT = 0.18; // los trazos finos de bolígrafo quedan más claros que un relleno
+    const NS = 24;
+    const cnt = new Array(NS).fill(0), ink = new Array(NS).fill(0);
+    const ri = Math.ceil(r1);
+    for (let dy = -ri; dy <= ri; dy++) for (let dx = -ri; dx <= ri; dx++) {
+      const d2 = dx * dx + dy * dy;
+      if (d2 < r0 * r0 || d2 > r1 * r1) continue;
+      const x = cx + dx, y = cy + dy;
+      let near = false;
+      for (let k = 0; k < row.length; k++) {
+        if (k === o) continue;
+        const ux = x - row[k][0], uy = y - row[k][1];
+        if (ux * ux + uy * uy < ex * ex) { near = true; break; }
+      }
+      if (near) continue;
+      const a = Math.atan2(dy, dx);
+      const sct = ((Math.floor((a + Math.PI) / (2 * Math.PI) * NS) % NS) + NS) % NS;
+      cnt[sct]++;
+      if (sample(D, x, y) > armT) ink[sct]++;
+    }
+    const on = cnt.map((c, i) => c >= 6 && ink[i] / c > 0.12);
+    if (dbg) { dbg.cnt = cnt; dbg.ink = ink; dbg.on = on; }
+    // grupos circulares de sectores consecutivos con tinta
+    const clusters = [];
+    const start = on.indexOf(false);
+    if (start < 0) return 0; // todo el anillo con tinta: no es una X (p. ej. un círculo rodeando)
+    let cur = null;
+    for (let j = 1; j <= NS; j++) {
+      const i = (start + j) % NS;
+      if (on[i]) { if (!cur) { cur = []; clusters.push(cur); } cur.push(i); } else cur = null;
+    }
+    // los brazos son estrechos: se descartan grupos muy anchos (manchas grandes)
+    const arms = clusters.filter(c => c.length <= 6);
+    // una X deja 3-4 brazos; 2 brazos opuestos suelen ser un relleno que desborda por los lados
+    return arms.length;
   }
 
   function readDni(cols, base, opt) {
@@ -586,5 +646,5 @@
     return out;
   }
 
-  return { analyze, locate, T, bubblePt, dniPt, DEFAULTS, classify };
+  return { analyze, locate, T, bubblePt, dniPt, DEFAULTS, classify, LETTERS };
 });

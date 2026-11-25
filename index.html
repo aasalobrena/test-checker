@@ -80,7 +80,7 @@
         <div class="card">
           <h2>Revisión</h2>
           <p class="muted small">Toca una burbuja de la imagen para marcarla o desmarcarla si la lectura no es correcta.
-            <span class="legend"><i class="lg ok"></i>acierto <i class="lg bad"></i>fallo <i class="lg key"></i>respuesta correcta <i class="lg doubt"></i>dudosa</span></p>
+            <span class="legend"><i class="lg ok"></i>acierto <i class="lg bad"></i>fallo <i class="lg key"></i>respuesta correcta <i class="lg doubt"></i>dudosa <b class="lg-x">✕</b>tachada</span></p>
           <div class="sheet-wrap">
             <canvas id="sheet-canvas"></canvas>
           </div>
@@ -126,7 +126,7 @@
             <span>Respuestas</span>
             <textarea id="k-text" rows="3" spellcheck="false" autocapitalize="characters" placeholder="ABCDDCBA…"></textarea>
           </label>
-          <p class="muted small">Escribe las letras en orden (<b>A</b>, <b>B</b>, <b>C</b>, <b>D</b>). Se ignoran los espacios, comas y números, así que también puedes pegar algo como <code>1A 2C 3B…</code>.
+          <p class="muted small">Escribe las letras en orden (<b>A</b>, <b>B</b>, <b>C</b>, <b>D</b>, <b>E</b>). Se ignoran los espacios, comas y números, así que también puedes pegar algo como <code>1A 2C 3B…</code>.
             Usa <b>X</b> o <b>-</b> para una pregunta <b>anulada</b> (no cuenta). También puedes tocar las casillas de abajo o escanear una hoja rellenada con las respuestas correctas.</p>
           <div class="btn-row">
             <button id="btn-key-scan" class="btn">📷 Escanear hoja con las soluciones</button>
@@ -168,7 +168,7 @@
       <div class="card prose">
         <h2>Cómo funciona</h2>
         <ol>
-          <li>Descarga e imprime la <a href="plantilla.pdf" download>plantilla de respuestas (PDF)</a>.</li>
+          <li>Descarga e imprime la plantilla de respuestas: <a href="plantilla-5-opciones.pdf" download>con opciones A–E</a> o <a href="plantilla.pdf" download>con opciones A–D</a> (PDF). La app lee las dos.</li>
           <li>En <b>Solucionarios</b>, crea el solucionario del examen: escribe las respuestas correctas, tócalas en la cuadrícula o escanea una hoja rellenada con ellas.
             Si lo creas en el ordenador, pulsa <b>Pasar al móvil</b> y escanea el código QR con el móvil.</li>
           <li>En <b>Corregir</b>, elige el solucionario y escanea cada hoja con la cámara. La lectura es automática al encuadrar la hoja; también puedes hacer una foto o subir una imagen.</li>
@@ -180,6 +180,7 @@
         <ul>
           <li>Las preguntas en blanco no suman ni restan.</li>
           <li>Una pregunta con <b>más de una casilla marcada</b> cuenta como <b>fallo</b>.</li>
+          <li>Para <b>anular una respuesta</b>, el alumno tacha la burbuja rellena con una <b>X que sobresalga del círculo</b>: esa marca no cuenta (y puede marcar otra). En la revisión aparece con una X gris.</li>
           <li>Las preguntas <b>anuladas</b> en el solucionario no cuentan y se descuentan del total.</li>
         </ul>
         <label class="check"><input type="checkbox" id="set-negative"> Permitir puntuaciones negativas (si no, el mínimo es 0)</label>
@@ -187,7 +188,7 @@
         <ul>
           <li>Que se vea la hoja entera, o al menos todo el recuadro <b>ZONA 2</b> y el <b>D.N.I.</b></li>
           <li>Hoja plana, buena luz y sin sombras fuertes. No hace falta que esté recta.</li>
-          <li>Las marcas deben rellenar el círculo con bolígrafo azul o negro. Las cruces, rayas o marcas muy pequeñas se señalan como <span class="tag doubt">dudosas</span> para que las revises.</li>
+          <li>Las marcas deben rellenar el círculo con bolígrafo azul o negro. Una X que sobresale del círculo anula la respuesta. Las cruces pequeñas dentro del círculo, las rayas o las marcas muy pequeñas se señalan como <span class="tag doubt">dudosas</span> para que las revises.</li>
         </ul>
         <h3>Privacidad</h3>
         <p>Todo funciona en tu navegador. Las imágenes no salen del dispositivo y los solucionarios y el historial se guardan solo en este navegador (usa <i>Exportar</i> para hacer copias). El enlace de <i>Pasar al móvil</i> lleva las respuestas del solucionario dentro del propio enlace: compártelo solo con quien deba tenerlas.</p>

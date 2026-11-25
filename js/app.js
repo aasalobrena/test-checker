@@ -1,10 +1,11 @@
 /* Corrector de exámenes – lógica de la aplicación */
 'use strict';
 
-const APP_VERSION = '1.1.1';
+const APP_VERSION = '1.2.0';
 const PENALTY = 0.33; // cada fallo resta 0,33 (no un tercio)
 const NQ = 80;
-const LETTERS = 'ABCD';
+const LETTERS = 'ABCDE';
+const NOPT = LETTERS.length;
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -214,6 +215,7 @@ async function handleAnalyzed(res, mode) {
     keyId: k ? k.id : null,
     res,
     marks: res.answers.map((a) => a.marks.slice()),
+    cancelled: res.answers.map((a) => (a.cancelled || []).slice()),
     doubtful: res.answers.map((a) => a.doubtful),
     dniDigits: res.dni.digits.map((d) => (d === '?' ? '' : d)),
     dniDoubtful: res.dni.doubtful,
@@ -281,6 +283,9 @@ function renderResult() {
   const beyond = [];
   for (let q = key.n; q < NQ; q++) if (cur.marks[q].some(Boolean)) beyond.push(q + 1);
   if (beyond.length) warns.push(`Hay marcas en preguntas que no forman parte de este examen (${beyond.length > 6 ? beyond.slice(0, 6).join(', ') + '…' : beyond.join(', ')}); no se tienen en cuenta.`);
+  const crossed = [];
+  for (let q = 0; q < key.n; q++) if (cur.cancelled[q].some((c, o) => c && !cur.marks[q][o])) crossed.push(q + 1);
+  if (crossed.length) warns.push(`Respuestas tachadas por el alumno (no cuentan): ${crossed.join(', ')}.`);
   if (cur.dniDoubtful && !cur.dniEdited) warns.push('El D.N.I. no se ha leído con seguridad: compruébalo.');
   $('#r-warn').innerHTML = warns.map((w) => `<div>${esc(w)}</div>`).join('');
   show('#r-warn', warns.length > 0);
@@ -319,25 +324,26 @@ function drawSheet() {
     const st = g.per[q].status;
     const row = pos[q];
     if (st === 'ignored') {
-      for (let o = 0; o < 4; o++) if (cur.marks[q][o]) circle(ctx, row[o], R, { fill: COLORS.neutral, alpha: 0.35 });
+      for (let o = 0; o < NOPT; o++) if (cur.marks[q][o]) circle(ctx, row[o], R, { fill: COLORS.neutral, alpha: 0.35 });
       continue;
     }
     if (st === 'void') {
-      const [x0, y0] = row[0], [x1, y1] = row[3];
+      const [x0, y0] = row[0], [x1, y1] = row[NOPT - 1];
       ctx.save(); ctx.strokeStyle = COLORS.void; ctx.lineWidth = 3; ctx.globalAlpha = 0.7;
       ctx.beginPath(); ctx.moveTo(x0 - R * 1.4, y0); ctx.lineTo(x1 + R * 1.4, y1); ctx.stroke(); ctx.restore();
-      for (let o = 0; o < 4; o++) if (cur.marks[q][o]) circle(ctx, row[o], R, { fill: COLORS.void, alpha: 0.35 });
+      for (let o = 0; o < NOPT; o++) if (cur.marks[q][o]) circle(ctx, row[o], R, { fill: COLORS.void, alpha: 0.35 });
       continue;
     }
     const k = key.answers[q];
-    for (let o = 0; o < 4; o++) {
+    for (let o = 0; o < NOPT; o++) {
+      if (cur.cancelled[q][o] && !cur.marks[q][o]) crossMark(ctx, row[o], R);
       if (cur.marks[q][o]) circle(ctx, row[o], R, { fill: st === 'ok' ? COLORS.ok : COLORS.bad, alpha: 0.45 });
     }
     if (st !== 'ok' && LETTERS.includes(k)) {
       circle(ctx, row[LETTERS.indexOf(k)], R + 3, { stroke: COLORS.key, width: 3.5 });
     }
     if (cur.doubtful[q]) {
-      const [x0, y0] = row[0], [x1, y1] = row[3];
+      const [x0, y0] = row[0], [x1, y1] = row[NOPT - 1];
       ctx.save(); ctx.strokeStyle = COLORS.doubt; ctx.lineWidth = 3; ctx.setLineDash([7, 5]);
       roundRect(ctx, Math.min(x0, x1) - R - 7, Math.min(y0, y1) - R - 7, Math.abs(x1 - x0) + 2 * R + 14, Math.abs(y1 - y0) + 2 * R + 14, 8);
       ctx.stroke(); ctx.restore();
@@ -357,6 +363,14 @@ function circle(ctx, [x, y], r, o) {
   ctx.arc(x, y, r, 0, Math.PI * 2);
   if (o.fill) { ctx.globalAlpha = o.alpha == null ? 1 : o.alpha; ctx.fillStyle = o.fill; ctx.fill(); ctx.globalAlpha = 1; }
   if (o.stroke) { ctx.strokeStyle = o.stroke; ctx.lineWidth = o.width || 2; ctx.stroke(); }
+  ctx.restore();
+}
+// respuesta tachada por el alumno: X gris sobre la burbuja
+function crossMark(ctx, [x, y], r) {
+  ctx.save();
+  ctx.strokeStyle = COLORS.neutral; ctx.lineWidth = 3; ctx.globalAlpha = 0.85;
+  const d = r * 1.25;
+  ctx.beginPath(); ctx.moveTo(x - d, y - d); ctx.lineTo(x + d, y + d); ctx.moveTo(x - d, y + d); ctx.lineTo(x + d, y - d); ctx.stroke();
   ctx.restore();
 }
 function roundRect(ctx, x, y, w, h, r) {
@@ -395,6 +409,7 @@ function onSheetTap(ev) {
 function toggleMark(q, o) {
   const cur = state.current;
   cur.marks[q][o] = !cur.marks[q][o];
+  cur.cancelled[q][o] = false;
   cur.doubtful[q] = false; // revisada a mano
   renderResult();
 }
@@ -407,7 +422,7 @@ function renderAnswerList(key, g) {
     const k = key.answers[q];
     const cls = ['ans', st === 'ok' ? 'ok' : st === 'bad' ? 'bad' : st === 'void' ? 'void' : '', cur.doubtful[q] ? 'doubt' : ''].join(' ');
     html.push(`<div class="${cls}" data-q="${q}"><span class="qn">${q + 1}</span>` +
-      [0, 1, 2, 3].map((o) => `<button type="button" data-o="${o}" class="${cur.marks[q][o] ? 'on' : ''} ${k === LETTERS[o] ? 'key' : ''}" aria-pressed="${cur.marks[q][o]}" aria-label="Pregunta ${q + 1} opción ${LETTERS[o]}">${LETTERS[o]}</button>`).join('') +
+      LETTERS.split('').map((L, o) => `<button type="button" data-o="${o}" class="${cur.marks[q][o] ? 'on' : ''} ${k === LETTERS[o] ? 'key' : ''}" aria-pressed="${cur.marks[q][o]}" aria-label="Pregunta ${q + 1} opción ${LETTERS[o]}">${LETTERS[o]}</button>`).join('') +
       `${k === 'X' ? '<small class="muted">anulada</small>' : ''}</div>`);
   }
   $('#answers-list').innerHTML = html.join('');
@@ -624,7 +639,7 @@ const editor = { id: null, answers: new Array(NQ).fill(''), n: 80 };
 function parseKeyText(text) {
   const out = [];
   for (const ch of String(text).toUpperCase()) {
-    if ('ABCD'.includes(ch)) out.push(ch);
+    if (LETTERS.includes(ch)) out.push(ch);
     else if (ch === 'X' || ch === '-' || ch === '*') out.push('X');
     else if (ch === '?' || ch === '_') out.push('');
     // el resto (espacios, números, comas, paréntesis…) se ignora
@@ -830,7 +845,7 @@ async function importKeys(file) {
     let added = 0;
     for (const k of arr) {
       if (!k || !Array.isArray(k.answers) || !(k.n >= 1 && k.n <= NQ)) continue;
-      const answers = k.answers.slice(0, NQ).map((a) => (['A', 'B', 'C', 'D', 'X'].includes(a) ? a : ''));
+      const answers = k.answers.slice(0, NQ).map((a) => ((LETTERS + 'X').includes(a) && a.length === 1 ? a : ''));
       while (answers.length < NQ) answers.push('');
       const exists = getKey(k.id);
       const nk = { id: exists ? uid() : (k.id || uid()), name: String(k.name || 'Importado'), code: String(k.code || ''), n: k.n, answers, created: k.created || new Date().toISOString() };
@@ -970,7 +985,7 @@ function importFromHash() {
   try { d = JSON.parse(b64urlDecode(m[1])); } catch (e) { d = null; }
   const n = d && parseInt(d.n, 10);
   const a = d && typeof d.a === 'string' ? d.a.toUpperCase() : '';
-  if (!d || !(n >= 1 && n <= NQ) || a.length !== n || !/^[ABCDX]+$/.test(a)) {
+  if (!d || !(n >= 1 && n <= NQ) || a.length !== n || !/^[ABCDEX]+$/.test(a)) {
     toast('El enlace del solucionario no es válido o está incompleto.', 4000);
     return;
   }

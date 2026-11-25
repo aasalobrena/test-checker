@@ -1,5 +1,5 @@
 /* Service worker: permite usar la app sin conexión tras la primera visita. */
-const CACHE = 'corrector-v1.1.1';
+const CACHE = 'corrector-v1.2.0';
 const ASSETS = [
   './',
   'index.html',
@@ -14,6 +14,7 @@ const ASSETS = [
   'icons/icon-192.png',
   'icons/icon-512.png',
   'plantilla.pdf',
+  'plantilla-5-opciones.pdf',
 ];
 
 self.addEventListener('install', (e) => {
