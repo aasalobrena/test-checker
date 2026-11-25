@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Corrector de exámenes</title>
+  <meta name="description" content="Corrige automáticamente exámenes tipo test escaneando la hoja de respuestas con la cámara del móvil.">
+  <meta name="theme-color" content="#1f2937">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Corrector de exámenes</h1>
+    <span id="engine-status" class="engine-status" title="Estado del motor de visión">Cargando motor…</span>
+  </header>
+
+  <main>
+    <!-- ======================= CORREGIR ======================= -->
+    <section id="view-scan" class="view active" aria-labelledby="tab-scan">
+      <div class="card">
+        <label class="field">
+          <span>Solucionario</span>
+          <select id="scan-key"></select>
+        </label>
+        <p id="scan-key-info" class="muted small"></p>
+        <div id="scan-nokey" class="notice hidden">
+          Todavía no hay ningún solucionario. <button class="link" data-goto="keys">Crea uno</button> para empezar a corregir.
+        </div>
+      </div>
+
+      <div class="actions-grid">
+        <button id="btn-camera" class="btn primary big" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l2-2h6l2 2h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="13" r="4" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+          Escanear con la cámara
+        </button>
+        <label id="btn-photo" class="btn big disabled">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 16l5-5 4 4 3-3 6 6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+          Foto o imagen
+          <input id="file-input" type="file" accept="image/*" hidden disabled>
+        </label>
+      </div>
+      <p class="muted small center">Encuadra la hoja <strong>completa</strong>, plana y con buena luz. Todo se procesa en tu dispositivo: no se sube ninguna imagen.</p>
+
+      <div id="scan-busy" class="busy hidden"><div class="spinner"></div><span>Analizando la hoja…</span></div>
+      <div id="scan-error" class="notice error hidden"></div>
+
+      <!-- Resultado -->
+      <div id="result" class="hidden">
+        <div class="card score-card">
+          <div class="score-main">
+            <div class="score-label">Puntuación</div>
+            <div class="score-value"><span id="r-points">0</span><span class="score-total"> / <span id="r-total">0</span></span></div>
+            <div class="muted small" id="r-formula"></div>
+          </div>
+          <div class="counts">
+            <div class="count ok"><span id="r-ok">0</span><small>Aciertos</small></div>
+            <div class="count bad"><span id="r-bad">0</span><small>Fallos</small></div>
+            <div class="count blank"><span id="r-blank">0</span><small>En blanco</small></div>
+            <div class="count void" id="r-void-box"><span id="r-void">0</span><small>Anuladas</small></div>
+          </div>
+        </div>
+
+        <div id="r-warn" class="notice warn hidden"></div>
+
+        <div class="card">
+          <div class="row2">
+            <label class="field"><span>D.N.I.</span><input id="r-dni" inputmode="text" autocomplete="off" placeholder="Leído de la hoja"></label>
+            <label class="field"><span>Nombre (opcional)</span><input id="r-name" autocomplete="off" placeholder="Alumno/a"></label>
+          </div>
+          <div class="btn-row">
+            <button id="btn-save-next" class="btn primary">Guardar y escanear otra</button>
+            <button id="btn-save" class="btn">Guardar</button>
+            <button id="btn-discard" class="btn ghost">Descartar</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Revisión</h2>
+          <p class="muted small">Toca una burbuja de la imagen para marcarla o desmarcarla si la lectura no es correcta.
+            <span class="legend"><i class="lg ok"></i>acierto <i class="lg bad"></i>fallo <i class="lg key"></i>respuesta correcta <i class="lg doubt"></i>dudosa</span></p>
+          <div class="sheet-wrap">
+            <canvas id="sheet-canvas"></canvas>
+          </div>
+          <details class="answers-details">
+            <summary>Lista de respuestas</summary>
+            <div id="answers-list" class="answers-list"></div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================= SOLUCIONARIOS ======================= -->
+    <section id="view-keys" class="view" aria-labelledby="tab-keys">
+      <div id="keys-list-wrap">
+        <div class="section-head">
+          <h2>Solucionarios</h2>
+          <button id="btn-new-key" class="btn primary">+ Nuevo</button>
+        </div>
+        <ul id="keys-list" class="list"></ul>
+        <p id="keys-empty" class="muted center hidden">No hay solucionarios. Pulsa <strong>+ Nuevo</strong> para crear el primero.</p>
+        <div class="card">
+          <h3>Copia de seguridad</h3>
+          <p class="muted small">Exporta tus solucionarios a un archivo para guardarlos o pasarlos a otro dispositivo.</p>
+          <div class="btn-row">
+            <button id="btn-export-keys" class="btn">Exportar</button>
+            <label class="btn">Importar<input id="import-keys" type="file" accept="application/json,.json" hidden></label>
+          </div>
+        </div>
+      </div>
+
+      <div id="key-editor" class="hidden">
+        <div class="section-head">
+          <h2 id="key-editor-title">Nuevo solucionario</h2>
+          <button id="btn-key-cancel" class="btn ghost">Cancelar</button>
+        </div>
+        <div class="card">
+          <label class="field"><span>Nombre</span><input id="k-name" placeholder="p. ej. Biología – 1er parcial" autocomplete="off"></label>
+          <div class="row2">
+            <label class="field"><span>Código de examen (opcional)</span><input id="k-code" autocomplete="off"></label>
+            <label class="field"><span>Nº de preguntas</span><input id="k-n" type="number" min="1" max="80" value="80" inputmode="numeric"></label>
+          </div>
+          <label class="field">
+            <span>Respuestas</span>
+            <textarea id="k-text" rows="3" spellcheck="false" autocapitalize="characters" placeholder="ABCDDCBA…"></textarea>
+          </label>
+          <p class="muted small">Escribe las letras en orden (<b>A</b>, <b>B</b>, <b>C</b>, <b>D</b>). Se ignoran los espacios, comas y números, así que también puedes pegar algo como <code>1A 2C 3B…</code>.
+            Usa <b>X</b> o <b>-</b> para una pregunta <b>anulada</b> (no cuenta). También puedes tocar las casillas de abajo o escanear una hoja rellenada con las respuestas correctas.</p>
+          <div class="btn-row">
+            <button id="btn-key-scan" class="btn">📷 Escanear hoja con las soluciones</button>
+          </div>
+          <div id="key-scan-busy" class="busy hidden"><div class="spinner"></div><span>Leyendo hoja…</span></div>
+          <div id="key-scan-msg" class="notice hidden"></div>
+          <p id="k-status" class="status"></p>
+          <div id="k-grid" class="key-grid"></div>
+          <div class="btn-row sticky-bottom">
+            <button id="btn-key-save" class="btn primary">Guardar solucionario</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================= HISTORIAL ======================= -->
+    <section id="view-history" class="view" aria-labelledby="tab-history">
+      <div class="section-head">
+        <h2>Historial</h2>
+        <select id="hist-filter" aria-label="Filtrar por solucionario"></select>
+      </div>
+      <div id="hist-stats" class="stats"></div>
+      <div class="table-wrap">
+        <table class="hist-table">
+          <thead><tr><th>Fecha</th><th>Nombre / DNI</th><th>Examen</th><th class="num">A</th><th class="num">F</th><th class="num">B</th><th class="num">Puntos</th><th></th></tr></thead>
+          <tbody id="hist-body"></tbody>
+        </table>
+      </div>
+      <p id="hist-empty" class="muted center hidden">Aún no hay resultados guardados.</p>
+      <div class="btn-row">
+        <button id="btn-export-csv" class="btn primary">Exportar CSV (Excel)</button>
+        <button id="btn-clear-hist" class="btn danger ghost">Borrar historial</button>
+      </div>
+    </section>
+
+    <!-- ======================= AYUDA ======================= -->
+    <section id="view-help" class="view" aria-labelledby="tab-help">
+      <div class="card prose">
+        <h2>Cómo funciona</h2>
+        <ol>
+          <li>Descarga e imprime la <a href="plantilla.pdf" download>plantilla de respuestas (PDF)</a>.</li>
+          <li>En <b>Solucionarios</b>, crea el solucionario del examen: escribe las respuestas correctas, tócalas en la cuadrícula o escanea una hoja rellenada con ellas.</li>
+          <li>En <b>Corregir</b>, elige el solucionario y escanea cada hoja con la cámara. La lectura es automática al encuadrar la hoja; también puedes hacer una foto o subir una imagen.</li>
+          <li>Revisa la imagen: las preguntas <span class="tag doubt">dudosas</span> salen resaltadas. Toca cualquier burbuja para corregir la lectura.</li>
+          <li>Guarda el resultado. En <b>Historial</b> puedes exportarlo todo a CSV para Excel.</li>
+        </ol>
+        <h3>Puntuación</h3>
+        <p><b>Puntos = aciertos − 0,33 × fallos</b>, sobre el número de preguntas del examen (sin contar las anuladas).</p>
+        <ul>
+          <li>Las preguntas en blanco no suman ni restan.</li>
+          <li>Una pregunta con <b>más de una casilla marcada</b> cuenta como <b>fallo</b>.</li>
+          <li>Las preguntas <b>anuladas</b> en el solucionario no cuentan y se descuentan del total.</li>
+        </ul>
+        <label class="check"><input type="checkbox" id="set-negative"> Permitir puntuaciones negativas (si no, el mínimo es 0)</label>
+        <h3>Consejos para una buena lectura</h3>
+        <ul>
+          <li>Que se vea la hoja entera, o al menos todo el recuadro <b>ZONA 2</b> y el <b>D.N.I.</b></li>
+          <li>Hoja plana, buena luz y sin sombras fuertes. No hace falta que esté recta.</li>
+          <li>Las marcas deben rellenar el círculo con bolígrafo azul o negro. Las cruces, rayas o marcas muy pequeñas se señalan como <span class="tag doubt">dudosas</span> para que las revises.</li>
+        </ul>
+        <h3>Privacidad</h3>
+        <p>Todo funciona en tu navegador. Las imágenes no salen del dispositivo y los solucionarios y el historial se guardan solo en este navegador (usa <i>Exportar</i> para hacer copias).</p>
+        <p class="muted small" id="app-version"></p>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar" role="tablist">
+    <button role="tab" id="tab-scan" data-view="scan" class="active" aria-selected="true">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>Corregir</span></button>
+    <button role="tab" id="tab-keys" data-view="keys" aria-selected="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h11M9 12h11M9 19h11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="4.5" cy="5" r="1.5" fill="currentColor"/><circle cx="4.5" cy="12" r="1.5" fill="currentColor"/><circle cx="4.5" cy="19" r="1.5" fill="currentColor"/></svg>
+      <span>Solucionarios</span></button>
+    <button role="tab" id="tab-history" data-view="history" aria-selected="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>Historial</span></button>
+    <button role="tab" id="tab-help" data-view="help" aria-selected="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17.5" r="1.2" fill="currentColor"/></svg>
+      <span>Ayuda</span></button>
+  </nav>
+
+  <!-- Cámara a pantalla completa -->
+  <div id="camera" class="camera hidden" role="dialog" aria-label="Cámara">
+    <video id="cam-video" playsinline muted autoplay></video>
+    <canvas id="cam-overlay"></canvas>
+    <div class="cam-hint" id="cam-hint">Encuadra la hoja completa</div>
+    <div class="cam-controls">
+      <button id="cam-close" class="btn ghost light">Cerrar</button>
+      <button id="cam-shot" class="shutter" aria-label="Capturar"></button>
+      <label class="btn ghost light">Galería<input id="cam-file" type="file" accept="image/*" hidden></label>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
