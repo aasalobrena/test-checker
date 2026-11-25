@@ -1,10 +1,16 @@
 /* Corrector de exámenes – lógica de la aplicación */
 'use strict';
 
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 const PENALTY = 0.33; // cada fallo resta 0,33 (no un tercio)
 const NQ = 80;
 const LETTERS = 'ABCDE';
+// Tipos de examen. scale: nota normalizada (p. ej. sobre 50) además de la de N preguntas.
+const TYPES = {
+  teoria: { label: 'Teoría' },
+  ingles: { label: 'Inglés' },
+  aptitudes: { label: 'Aptitudes', scale: 50 },
+};
 const NOPT = LETTERS.length;
 
 const $ = (sel) => document.querySelector(sel);
@@ -47,6 +53,32 @@ function activeKey() {
   return k;
 }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function fmtDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : (iso || '');
+}
+// Nombre visible: "Aptitudes · 25/11/2026" (+ " · 2" si ese día hay más de uno de ese tipo)
+function keyLabel(k) {
+  if (!k) return '';
+  if (!k.type) return k.name || 'Solucionario';
+  const t = TYPES[k.type] ? TYPES[k.type].label : k.type;
+  const siblings = state.keys.filter((x) => x.type === k.type && x.date === k.date);
+  const sub = (siblings.length > 1 || k.sub > 1) ? ` · ${k.sub}` : '';
+  return `${t} · ${fmtDate(k.date)}${sub}`;
+}
+function nextSub(type, date, exceptId) {
+  let m = 0;
+  state.keys.forEach((x) => { if (x.id !== exceptId && x.type === type && x.date === date) m = Math.max(m, x.sub || 1); });
+  return m + 1;
+}
+function keyScale(k) { return k && k.type && TYPES[k.type] ? TYPES[k.type].scale || null : null; }
+function sortKeys() {
+  state.keys.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (a.type || '').localeCompare(b.type || '') || (a.sub || 0) - (b.sub || 0));
+}
 
 // ---------------------------------------------------------------------------
 // Utilidades de interfaz
@@ -160,6 +192,9 @@ async function fileToImageData(file, maxSide = 2400) {
  * marks: array de 80 arrays [bool,bool,bool,bool]
  * Devuelve recuento y estado por pregunta.
  */
+function summaryLine(g) {
+  return `${g.ok} ${g.bad} ${g.blank} ${fmt(g.points)}/${g.total}` + (g.scale ? ` ${fmt(g.scaled)}/${g.scale}` : '');
+}
 function grade(key, marks) {
   const n = key.n;
   let ok = 0, bad = 0, blank = 0, voided = 0;
@@ -174,16 +209,18 @@ function grade(key, marks) {
     else { bad++; per.push({ status: 'bad', sel, multi: sel.length > 1 }); }
   }
   const total = n - voided;
-  let points = ok - PENALTY * bad;
-  points = Math.round(points * 100) / 100;
-  if (!state.settings.allowNegative && points < 0) points = 0;
-  return { ok, bad, blank, voided, total, points, per };
+  let raw = ok - PENALTY * bad;
+  if (!state.settings.allowNegative && raw < 0) raw = 0;
+  const points = Math.round(raw * 100) / 100;
+  const scale = keyScale(key);
+  const scaled = scale && total > 0 ? Math.round((raw * scale / total) * 100) / 100 : null;
+  return { ok, bad, blank, voided, total, points, scale, scaled, per };
 }
 
 function renderScanHeader() {
   const sel = $('#scan-key');
   const k = activeKey();
-  sel.innerHTML = state.keys.map((x) => `<option value="${esc(x.id)}"${k && x.id === k.id ? ' selected' : ''}>${esc(x.name)}${x.code ? ' (' + esc(x.code) + ')' : ''}</option>`).join('');
+  sel.innerHTML = state.keys.map((x) => `<option value="${esc(x.id)}"${k && x.id === k.id ? ' selected' : ''}>${esc(keyLabel(x))}</option>`).join('');
   show('#scan-nokey', !k);
   sel.disabled = !state.keys.length;
   $('#scan-key-info').textContent = k ? keySummary(k) : '';
@@ -199,7 +236,8 @@ function renderScanHeader() {
 
 function keySummary(k) {
   const voids = k.answers.slice(0, k.n).filter((a) => a === 'X').length;
-  return `${k.n} preguntas${voids ? ` · ${voids} anulada${voids > 1 ? 's' : ''}` : ''} · cada fallo resta ${fmt(PENALTY)}`;
+  const sc = keyScale(k);
+  return `${k.n} preguntas${voids ? ` · ${voids} anulada${voids > 1 ? 's' : ''}` : ''} · cada fallo resta ${fmt(PENALTY)}${sc ? ` · nota sobre ${sc}` : ''}`;
 }
 
 async function handleAnalyzed(res, mode) {
@@ -271,7 +309,11 @@ function renderResult() {
   $('#r-blank').textContent = g.blank;
   $('#r-void').textContent = g.voided;
   show('#r-void-box', g.voided > 0);
-  $('#r-formula').textContent = `${g.ok} − ${fmt(PENALTY)} × ${g.bad} = ${fmt(g.ok - PENALTY * g.bad)}`;
+  $('#r-formula').textContent = `${g.ok} − ${fmt(PENALTY)} × ${g.bad} = ${fmt(g.ok - PENALTY * g.bad)}` +
+    (g.scale ? ` · ${fmt(g.points)} × ${g.scale} / ${g.total} = ${fmt(g.scaled)}` : '');
+  show('#r-scaled-box', !!g.scale);
+  if (g.scale) { $('#r-scaled').textContent = fmt(g.scaled); $('#r-scale').textContent = g.scale; }
+  $('#r-summary').textContent = summaryLine(g);
 
   // avisos
   const warns = [];
@@ -446,8 +488,9 @@ function saveCurrent(next) {
     id: uid(),
     date: new Date().toISOString(),
     keyId: key.id,
-    keyName: key.name,
-    keyCode: key.code || '',
+    keyName: keyLabel(key),
+    keyType: key.type || '',
+    keyDate: key.date || '',
     n: key.n,
     dni,
     name,
@@ -457,10 +500,12 @@ function saveCurrent(next) {
     voided: g.voided,
     total: g.total,
     points: g.points,
+    scale: g.scale || null,
+    scaled: g.scaled,
     answers: cur.marks.slice(0, key.n).map((m) => m.map((b, i) => (b ? LETTERS[i] : '')).join('')),
   });
   saveHistory();
-  toast(`Guardado: ${fmt(g.points)} / ${g.total}`);
+  toast(`Guardado: ${summaryLine(g)}`);
   discardCurrent();
   if (next) openCamera('grade');
 }
@@ -634,7 +679,14 @@ async function captureAndAnalyze() {
 // ---------------------------------------------------------------------------
 // Solucionarios
 // ---------------------------------------------------------------------------
-const editor = { id: null, answers: new Array(NQ).fill(''), n: 80 };
+const editor = { id: null, answers: new Array(NQ).fill(''), type: '', date: '' };
+
+// nº de preguntas = hasta la última respuesta escrita
+function editorN() {
+  let last = -1;
+  editor.answers.forEach((a, i) => { if (a !== '') last = i; });
+  return last + 1;
+}
 
 function parseKeyText(text) {
   const out = [];
@@ -655,13 +707,14 @@ function keyToText(answers, n) {
 }
 
 function renderKeysList() {
+  sortKeys();
   const list = $('#keys-list');
   const act = activeKey();
   list.innerHTML = state.keys.map((k) => {
     const nh = state.history.filter((h) => h.keyId === k.id).length;
     return `<li data-id="${esc(k.id)}">
-      <div class="li-head"><span class="li-title">${esc(k.name)}</span>${act && act.id === k.id ? '<span class="badge">en uso</span>' : ''}</div>
-      <div class="li-sub">${k.code ? 'Código ' + esc(k.code) + ' · ' : ''}${esc(keySummary(k))}${nh ? ` · ${nh} corregido${nh > 1 ? 's' : ''}` : ''}</div>
+      <div class="li-head"><span class="li-title">${esc(keyLabel(k))}</span>${act && act.id === k.id ? '<span class="badge">en uso</span>' : ''}</div>
+      <div class="li-sub">${esc(keySummary(k))}${nh ? ` · ${nh} corregido${nh > 1 ? 's' : ''}` : ''}</div>
       <div class="li-keys">${esc(keyToText(k.answers, k.n))}</div>
       <div class="btn-row">
         <button class="btn primary" data-act="use">Corregir con este</button>
@@ -676,18 +729,18 @@ function renderKeysList() {
 
 function openEditor(k, copy) {
   editor.id = k && !copy ? k.id : null;
-  editor.n = k ? k.n : 80;
-  editor.answers = k ? k.answers.slice() : new Array(NQ).fill('');
+  editor.answers = k ? k.answers.slice(0, k.n) : [];
   while (editor.answers.length < NQ) editor.answers.push('');
-  $('#k-name').value = k ? (copy ? k.name + ' (copia)' : k.name) : '';
-  $('#k-code').value = k ? k.code || '' : '';
-  $('#k-n').value = editor.n;
-  $('#k-text').value = k ? keyToText(editor.answers, editor.n) : '';
+  editor.type = k && k.type ? k.type : (state.settings.lastType || '');
+  editor.date = k && k.date && !copy ? k.date : todayISO();
+  $('#k-date').value = editor.date;
+  $('#k-text').value = k ? keyToText(editor.answers, editorN()) : '';
   $('#key-editor-title').textContent = editor.id ? 'Editar solucionario' : 'Nuevo solucionario';
   show('#btn-key-share', !!editor.id);
   show('#key-scan-msg', false);
   show('#keys-list-wrap', false);
   show('#key-editor', true);
+  renderTypeSeg();
   renderKeyGrid();
   window.scrollTo(0, 0);
 }
@@ -697,12 +750,30 @@ function closeEditor() {
   renderKeysList();
 }
 
+function renderTypeSeg() {
+  $$('#k-type button').forEach((b) => {
+    const on = b.dataset.t === editor.type;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', on ? 'true' : 'false');
+  });
+  // vista previa del nombre que tendrá
+  const lab = $('#k-label');
+  if (!editor.type) { lab.textContent = 'Elige el tipo de examen.'; return; }
+  const sub = editor.id && getKey(editor.id) && getKey(editor.id).type === editor.type && getKey(editor.id).date === editor.date
+    ? getKey(editor.id).sub : nextSub(editor.type, editor.date, editor.id);
+  const sameDay = state.keys.some((x) => x.id !== editor.id && x.type === editor.type && x.date === editor.date);
+  lab.textContent = `Se guardará como: ${TYPES[editor.type].label} · ${fmtDate(editor.date)}${sameDay || sub > 1 ? ` · ${sub}` : ''}` +
+    (TYPES[editor.type].scale ? ` (nota sobre ${TYPES[editor.type].scale})` : '');
+}
+
 function renderKeyGrid() {
-  const n = editor.n;
+  const n = editorN();
+  const rows = Math.min(NQ, n + 1); // una fila vacía al final para seguir añadiendo
   const html = [];
-  for (let q = 0; q < n; q++) {
+  for (let q = 0; q < rows; q++) {
     const a = editor.answers[q];
-    html.push(`<div class="kq${a === '' ? ' missing' : ''}" data-q="${q}"><span class="qn">${q + 1}</span>` +
+    const extra = q >= n;
+    html.push(`<div class="kq${a === '' && !extra ? ' missing' : ''}${extra ? ' extra' : ''}" data-q="${q}"><span class="qn">${q + 1}</span>` +
       LETTERS.split('').map((L) => `<button type="button" data-v="${L}" class="${a === L ? 'on' : ''}" aria-pressed="${a === L}">${L}</button>`).join('') +
       `<button type="button" data-v="X" class="x ${a === 'X' ? 'on' : ''}" title="Anulada" aria-pressed="${a === 'X'}">✕</button></div>`);
   }
@@ -711,27 +782,26 @@ function renderKeyGrid() {
 }
 
 function updateKeyStatus() {
-  const n = editor.n;
+  const n = editorN();
   const ans = editor.answers.slice(0, n);
   const missing = [];
   ans.forEach((a, i) => { if (a === '') missing.push(i + 1); });
   const voids = ans.filter((a) => a === 'X').length;
   const st = $('#k-status');
-  if (missing.length) {
-    st.textContent = `Faltan ${missing.length} de ${n}: ${missing.length > 12 ? missing.slice(0, 12).join(', ') + '…' : missing.join(', ')}`;
-    st.className = 'status bad';
+  if (!n) {
+    st.textContent = 'Escribe las respuestas.';
+    st.className = 'status';
+  } else if (missing.length) {
+    st.textContent = `${n} preguntas, pero faltan ${missing.length}: ${missing.length > 12 ? missing.slice(0, 12).join(', ') + '…' : missing.join(', ')}`;
+    st.className = 'status bad big-count';
   } else {
-    st.textContent = `✓ ${n} respuestas definidas${voids ? ` (${voids} anulada${voids > 1 ? 's' : ''})` : ''}`;
-    st.className = 'status ok';
+    st.textContent = `✓ ${n} preguntas${voids ? ` (${voids} anulada${voids > 1 ? 's' : ''}: cuentan ${n - voids})` : ''}. Comprueba que es el número correcto.`;
+    st.className = 'status ok big-count';
   }
 }
 
 function onKeyTextInput() {
   const parsed = parseKeyText($('#k-text').value);
-  if (parsed.length > editor.n && editor.n < NQ) {
-    editor.n = Math.min(NQ, parsed.length);
-    $('#k-n').value = editor.n;
-  }
   for (let q = 0; q < NQ; q++) editor.answers[q] = q < parsed.length ? parsed[q] : '';
   renderKeyGrid();
   if (parsed.length > NQ) {
@@ -747,22 +817,14 @@ function onKeyGridClick(ev) {
   const q = +b.closest('.kq').dataset.q;
   const v = b.dataset.v;
   editor.answers[q] = editor.answers[q] === v ? '' : v;
-  $('#k-text').value = keyToText(editor.answers, editor.n);
-  renderKeyGrid();
-}
-
-function onKeyNChange() {
-  let n = parseInt($('#k-n').value, 10);
-  if (!(n >= 1)) return;
-  n = Math.min(NQ, n);
-  editor.n = n;
-  $('#k-text').value = keyToText(editor.answers, n);
+  $('#k-text').value = keyToText(editor.answers, editorN());
   renderKeyGrid();
 }
 
 function saveEditor() {
-  const n = editor.n;
+  const n = editorN();
   const ans = editor.answers.slice(0, n);
+  if (!n) { toast('Escribe las respuestas del examen.'); return; }
   const missing = ans.filter((a) => a === '').length;
   if (missing) {
     toast(`Faltan ${missing} respuestas por definir.`);
@@ -770,26 +832,33 @@ function saveEditor() {
     return;
   }
   if (ans.every((a) => a === 'X')) { toast('Todas las preguntas están anuladas.'); return; }
-  let name = $('#k-name').value.trim();
-  if (!name) name = 'Examen ' + new Date().toLocaleDateString('es-ES');
-  const data = { name, code: $('#k-code').value.trim(), n, answers: ans.concat(new Array(NQ - n).fill('')), updated: new Date().toISOString() };
+  if (!editor.type) { toast('Elige el tipo de examen: Teoría, Inglés o Aptitudes.'); return; }
+  const date = $('#k-date').value || todayISO();
+  state.settings.lastType = editor.type;
+  saveSettings();
+  const data = { type: editor.type, date, n, answers: ans.concat(new Array(NQ - n).fill('')), updated: new Date().toISOString() };
+  let k;
   if (editor.id) {
-    const k = getKey(editor.id);
+    k = getKey(editor.id);
+    if (k.type !== data.type || k.date !== data.date || !k.sub) data.sub = nextSub(data.type, data.date, k.id);
     Object.assign(k, data);
-    // actualizar nombre en el historial
-    state.history.forEach((h) => { if (h.keyId === k.id) { h.keyName = k.name; h.keyCode = k.code; } });
-    saveHistory();
+    delete k.name; delete k.code;
   } else {
-    const k = Object.assign({ id: uid(), created: new Date().toISOString() }, data);
+    k = Object.assign({ id: uid(), created: new Date().toISOString(), sub: nextSub(data.type, data.date) }, data);
     state.keys.push(k);
     setActiveKey(k.id);
   }
+  // actualizar los nombres en el historial
+  state.history.forEach((h) => {
+    const hk = getKey(h.keyId);
+    if (hk) { h.keyName = keyLabel(hk); h.keyType = hk.type || ''; h.keyDate = hk.date || ''; }
+  });
+  saveHistory();
   saveKeys();
   closeEditor();
-  const saved = getKey(editor.id) || getKey(state.activeKeyId);
   const touch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
-  if (saved && !touch) openShare(saved, true); // en el ordenador: mostrar directamente el QR
-  else toast('Solucionario guardado');
+  if (!touch) openShare(k, true); // en el ordenador: mostrar directamente el QR
+  else toast(`Guardado: ${keyLabel(k)} · ${n} preguntas`);
 }
 
 function keyScanMsg(html, kind) {
@@ -811,18 +880,17 @@ function applyKeyScan(res) {
   let last = -1;
   answers.forEach((a, i) => { if (a !== '' || multi.includes(i + 1)) last = i; });
   if (last < 0) { keyScanMsg('No se ha encontrado ninguna respuesta marcada en la hoja.', 'error'); return; }
-  editor.n = last + 1;
-  editor.answers = answers.concat([]);
-  $('#k-n').value = editor.n;
-  $('#k-text').value = keyToText(editor.answers, editor.n);
+  const n = last + 1;
+  editor.answers = answers.map((a, i) => (i < n ? a : ''));
+  $('#k-text').value = keyToText(editor.answers, n);
   renderKeyGrid();
-  const parts = [`Leídas ${editor.n} preguntas.`];
+  const parts = [`Leídas ${n} preguntas.`];
   const blanks = [];
-  for (let q = 0; q < editor.n; q++) if (answers[q] === '' && !multi.includes(q + 1)) blanks.push(q + 1);
+  for (let q = 0; q < n; q++) if (answers[q] === '' && !multi.includes(q + 1)) blanks.push(q + 1);
   if (blanks.length) parts.push(`Sin marcar (complétalas o anúlalas): ${blanks.join(', ')}.`);
   if (multi.length) parts.push(`Con varias marcas: ${multi.join(', ')}.`);
   if (doubt.length) parts.push(`Dudosas, revísalas: ${doubt.join(', ')}.`);
-  parts.push('Comprueba el número de preguntas antes de guardar.');
+  parts.push('Comprueba el número de preguntas y elige el tipo de examen antes de guardar.');
   keyScanMsg(parts.map(esc).join('<br>'), blanks.length || multi.length || doubt.length ? 'warn' : 'ok');
 }
 function gotoViewKeepEditor() {
@@ -848,7 +916,11 @@ async function importKeys(file) {
       const answers = k.answers.slice(0, NQ).map((a) => ((LETTERS + 'X').includes(a) && a.length === 1 ? a : ''));
       while (answers.length < NQ) answers.push('');
       const exists = getKey(k.id);
-      const nk = { id: exists ? uid() : (k.id || uid()), name: String(k.name || 'Importado'), code: String(k.code || ''), n: k.n, answers, created: k.created || new Date().toISOString() };
+      const nk = { id: exists ? uid() : (k.id || uid()), n: k.n, answers, created: k.created || new Date().toISOString() };
+      if (k.type && TYPES[k.type]) {
+        nk.type = k.type; nk.date = /^\d{4}-\d{2}-\d{2}$/.test(k.date) ? k.date : todayISO();
+        nk.sub = nextSub(nk.type, nk.date);
+      } else { nk.name = String(k.name || 'Importado'); }
       state.keys.push(nk);
       added++;
     }
@@ -872,7 +944,7 @@ function renderHistory() {
   const sel = $('#hist-filter');
   const prev = sel.value;
   const opts = new Map();
-  state.keys.forEach((k) => opts.set(k.id, k.name));
+  state.keys.forEach((k) => opts.set(k.id, keyLabel(k)));
   state.history.forEach((h) => { if (!opts.has(h.keyId)) opts.set(h.keyId, h.keyName); });
   sel.innerHTML = '<option value="">Todos los exámenes</option>' + Array.from(opts).map(([id, name]) => `<option value="${esc(id)}">${esc(name)}</option>`).join('');
   if (prev && opts.has(prev)) sel.value = prev;
@@ -884,7 +956,7 @@ function renderHistory() {
       <td><button class="link" data-act="name" title="Editar nombre">${esc(h.name || '—')}</button><div class="sub">${esc(h.dni || 'sin DNI')}</div></td>
       <td>${esc(h.keyName)}</td>
       <td class="num">${h.ok}</td><td class="num">${h.bad}</td><td class="num">${h.blank}</td>
-      <td class="num pts">${fmt(h.points)}<span class="sub"> / ${h.total}</span></td>
+      <td class="num pts">${fmt(h.points)}<span class="sub"> / ${h.total}</span>${h.scale ? `<div>${fmt(h.scaled)}<span class="sub"> / ${h.scale}</span></div>` : ''}</td>
       <td><button data-act="del" aria-label="Borrar">🗑</button></td></tr>`;
   }).join('');
   show('#hist-empty', !rows.length);
@@ -897,7 +969,8 @@ function renderHistory() {
     st.innerHTML = `<div class="stat">Hojas <b>${rows.length}</b></div>
       <div class="stat">Media <b>${fmt(avg)}</b>${tot}</div>
       <div class="stat">Máx. <b>${fmt(Math.max(...pts))}</b></div>
-      <div class="stat">Mín. <b>${fmt(Math.min(...pts))}</b></div>`;
+      <div class="stat">Mín. <b>${fmt(Math.min(...pts))}</b></div>` +
+      (rows.every((h) => h.scale) ? `<div class="stat">Media sobre ${rows[0].scale} <b>${fmt(rows.reduce((a, h) => a + h.scaled, 0) / rows.length)}</b></div>` : '');
   } else st.innerHTML = '';
 }
 
@@ -909,13 +982,14 @@ function exportCsv() {
   const rows = histFiltered();
   if (!rows.length) { toast('No hay resultados que exportar.'); return; }
   const maxN = Math.max(...rows.map((h) => h.n));
-  const head = ['Fecha', 'Hora', 'Examen', 'Código', 'Nombre', 'DNI', 'Aciertos', 'Fallos', 'En blanco', 'Anuladas', 'Preguntas', 'Puntos'];
+  const head = ['Fecha corrección', 'Hora', 'Tipo', 'Fecha examen', 'Examen', 'Nombre', 'DNI', 'Aciertos', 'Fallos', 'En blanco', 'Anuladas', 'Preguntas', 'Puntos', 'Nota /50'];
   for (let i = 1; i <= maxN; i++) head.push('P' + i);
   const lines = [head.map(csvCell).join(';')];
   rows.slice().reverse().forEach((h) => {
     const d = new Date(h.date);
-    const r = [d.toLocaleDateString('es-ES'), d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }), h.keyName, h.keyCode, h.name, h.dni,
-      h.ok, h.bad, h.blank, h.voided, h.total, fmt(h.points)];
+    const r = [d.toLocaleDateString('es-ES'), d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+      h.keyType && TYPES[h.keyType] ? TYPES[h.keyType].label : '', fmtDate(h.keyDate), h.keyName, h.name, h.dni,
+      h.ok, h.bad, h.blank, h.voided, h.total, fmt(h.points), h.scale ? fmt(h.scaled) : ''];
     for (let i = 0; i < maxN; i++) r.push(h.answers[i] || '');
     lines.push(r.map(csvCell).join(';'));
   });
@@ -955,14 +1029,15 @@ function b64urlDecode(s) {
   return new TextDecoder().decode(bytes);
 }
 function shareUrl(k) {
-  const payload = { v: 1, name: k.name, code: k.code || '', n: k.n, a: k.answers.slice(0, k.n).join('') };
+  const payload = k.type ? { v: 2, t: k.type, d: k.date, s: k.sub || 1, a: k.answers.slice(0, k.n).join('') }
+    : { v: 1, name: k.name, n: k.n, a: k.answers.slice(0, k.n).join('') };
   return location.origin + location.pathname + '#k=' + b64urlEncode(JSON.stringify(payload));
 }
 let shareCurrent = '';
 function openShare(k, justSaved) {
   shareCurrent = shareUrl(k);
   $('#share-title').textContent = justSaved ? '✓ Guardado. Pásalo al móvil' : 'Pasar al móvil';
-  $('#share-name').textContent = k.name;
+  $('#share-name').textContent = keyLabel(k);
   const box = $('#share-qr');
   try {
     const qr = qrcode(0, 'M');
@@ -983,26 +1058,33 @@ function importFromHash() {
   history.replaceState(null, '', location.pathname + location.search);
   let d;
   try { d = JSON.parse(b64urlDecode(m[1])); } catch (e) { d = null; }
-  const n = d && parseInt(d.n, 10);
   const a = d && typeof d.a === 'string' ? d.a.toUpperCase() : '';
-  if (!d || !(n >= 1 && n <= NQ) || a.length !== n || !/^[ABCDEX]+$/.test(a)) {
+  const n = a.length;
+  const okType = d && (d.v === 2 ? TYPES[d.t] && /^\d{4}-\d{2}-\d{2}$/.test(d.d) : true);
+  if (!d || !okType || !(n >= 1 && n <= NQ) || !/^[ABCDEX]+$/.test(a)) {
     toast('El enlace del solucionario no es válido o está incompleto.', 4000);
     return;
   }
   const answers = a.split('').concat(new Array(NQ - n).fill(''));
-  const name = String(d.name || 'Solucionario importado').slice(0, 120);
-  const code = String(d.code || '').slice(0, 60);
-  const same = state.keys.find((k) => k.n === n && k.name === name && k.answers.slice(0, n).join('') === a);
+  const k = { id: uid(), n, answers, created: new Date().toISOString() };
+  if (d.v === 2) { k.type = d.t; k.date = d.d; } else { k.name = String(d.name || 'Solucionario importado').slice(0, 120); }
+  const same = state.keys.find((x) => x.n === n && x.answers.slice(0, n).join('') === a &&
+    (k.type ? x.type === k.type && x.date === k.date : x.name === k.name));
   if (same) {
     setActiveKey(same.id);
-    toast(`Ya tenías el solucionario «${name}». Queda seleccionado.`, 3500);
+    toast(`Ya tenías el solucionario «${keyLabel(same)}». Queda seleccionado.`, 3500);
     return;
   }
-  const k = { id: uid(), name, code, n, answers, created: new Date().toISOString() };
+  if (k.type) {
+    // conservar el número del otro dispositivo si está libre aquí
+    const want = parseInt(d.s, 10);
+    const taken = state.keys.some((x) => x.type === k.type && x.date === k.date && x.sub === want);
+    k.sub = want >= 1 && !taken ? want : nextSub(k.type, k.date);
+  }
   state.keys.push(k);
   saveKeys();
   setActiveKey(k.id);
-  toast(`Solucionario «${name}» añadido y seleccionado.`, 3500);
+  toast(`Solucionario «${keyLabel(k)}» añadido y seleccionado.`, 3500);
 }
 
 // ---------------------------------------------------------------------------
@@ -1052,8 +1134,13 @@ function bind() {
   $('#btn-key-save').addEventListener('click', saveEditor);
   $('#btn-key-share').addEventListener('click', () => { const k = getKey(editor.id); if (k) openShare(k); });
   $('#k-text').addEventListener('input', onKeyTextInput);
-  $('#k-n').addEventListener('change', onKeyNChange);
-  $('#k-n').addEventListener('input', onKeyNChange);
+  $('#k-type').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-t]');
+    if (!b) return;
+    editor.type = b.dataset.t;
+    renderTypeSeg();
+  });
+  $('#k-date').addEventListener('change', () => { editor.date = $('#k-date').value || todayISO(); renderTypeSeg(); });
   $('#k-grid').addEventListener('click', onKeyGridClick);
   $('#btn-key-scan').addEventListener('click', () => openCamera('key'));
   $('#keys-list').addEventListener('click', (ev) => {
@@ -1067,7 +1154,7 @@ function bind() {
     else if (b.dataset.act === 'dup') openEditor(k, true);
     else if (b.dataset.act === 'share') openShare(k);
     else if (b.dataset.act === 'del') {
-      if (!confirm(`¿Borrar el solucionario «${k.name}»? Los resultados guardados en el historial se conservan.`)) return;
+      if (!confirm(`¿Borrar el solucionario «${keyLabel(k)}»? Los resultados guardados en el historial se conservan.`)) return;
       state.keys = state.keys.filter((x) => x.id !== id);
       if (state.activeKeyId === id) setActiveKey(state.keys[0] ? state.keys[0].id : null);
       saveKeys();

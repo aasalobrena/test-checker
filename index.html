@@ -53,7 +53,9 @@
           <div class="score-main">
             <div class="score-label">Puntuación</div>
             <div class="score-value"><span id="r-points">0</span><span class="score-total"> / <span id="r-total">0</span></span></div>
+            <div class="score-scaled" id="r-scaled-box"><span id="r-scaled">0</span><span class="score-total"> / <span id="r-scale">50</span></span></div>
             <div class="muted small" id="r-formula"></div>
+            <div class="summary-line" id="r-summary" title="Aciertos, fallos, en blanco y puntuación"></div>
           </div>
           <div class="counts">
             <div class="count ok"><span id="r-ok">0</span><small>Aciertos</small></div>
@@ -117,17 +119,22 @@
           <button id="btn-key-cancel" class="btn ghost">Cancelar</button>
         </div>
         <div class="card">
-          <label class="field"><span>Nombre</span><input id="k-name" placeholder="p. ej. Biología – 1er parcial" autocomplete="off"></label>
-          <div class="row2">
-            <label class="field"><span>Código de examen (opcional)</span><input id="k-code" autocomplete="off"></label>
-            <label class="field"><span>Nº de preguntas</span><input id="k-n" type="number" min="1" max="80" value="80" inputmode="numeric"></label>
+          <div class="field">
+            <span>Tipo de examen</span>
+            <div class="seg" id="k-type" role="radiogroup" aria-label="Tipo de examen">
+              <button type="button" role="radio" data-t="teoria">Teoría</button>
+              <button type="button" role="radio" data-t="ingles">Inglés</button>
+              <button type="button" role="radio" data-t="aptitudes">Aptitudes</button>
+            </div>
           </div>
+          <label class="field"><span>Fecha del examen</span><input id="k-date" type="date"></label>
+          <p id="k-label" class="muted small"></p>
           <label class="field">
             <span>Respuestas</span>
             <textarea id="k-text" rows="3" spellcheck="false" autocapitalize="characters" placeholder="ABCDDCBA…"></textarea>
           </label>
           <p class="muted small">Escribe las letras en orden (<b>A</b>, <b>B</b>, <b>C</b>, <b>D</b>, <b>E</b>). Se ignoran los espacios, comas y números, así que también puedes pegar algo como <code>1A 2C 3B…</code>.
-            Usa <b>X</b> o <b>-</b> para una pregunta <b>anulada</b> (no cuenta). También puedes tocar las casillas de abajo o escanear una hoja rellenada con las respuestas correctas.</p>
+            Usa <b>X</b> o <b>-</b> para una pregunta <b>anulada</b> (no cuenta). El número de preguntas se calcula solo. También puedes tocar las casillas de abajo o escanear una hoja rellenada con las respuestas correctas.</p>
           <div class="btn-row">
             <button id="btn-key-scan" class="btn">📷 Escanear hoja con las soluciones</button>
           </div>
@@ -169,7 +176,7 @@
         <h2>Cómo funciona</h2>
         <ol>
           <li>Descarga e imprime la plantilla de respuestas: <a href="plantilla-5-opciones.pdf" download>con opciones A–E</a> o <a href="plantilla.pdf" download>con opciones A–D</a> (PDF). La app lee las dos.</li>
-          <li>En <b>Solucionarios</b>, crea el solucionario del examen: escribe las respuestas correctas, tócalas en la cuadrícula o escanea una hoja rellenada con ellas.
+          <li>En <b>Solucionarios</b>, crea el solucionario: elige el tipo (Teoría, Inglés o Aptitudes) y la fecha, y escribe las respuestas correctas (o tócalas en la cuadrícula, o escanea una hoja rellenada con ellas). El número de preguntas se cuenta solo; si un mismo día hay varios exámenes del mismo tipo, se numeran automáticamente.
             Si lo creas en el ordenador, pulsa <b>Pasar al móvil</b> y escanea el código QR con el móvil.</li>
           <li>En <b>Corregir</b>, elige el solucionario y escanea cada hoja con la cámara. La lectura es automática al encuadrar la hoja; también puedes hacer una foto o subir una imagen.</li>
           <li>Revisa la imagen: las preguntas <span class="tag doubt">dudosas</span> salen resaltadas. Toca cualquier burbuja para corregir la lectura.</li>
@@ -177,6 +184,7 @@
         </ol>
         <h3>Puntuación</h3>
         <p><b>Puntos = aciertos − 0,33 × fallos</b>, sobre el número de preguntas del examen (sin contar las anuladas).</p>
+        <p>En los exámenes de <b>Aptitudes</b> se muestra además la nota normalizada <b>sobre 50</b>: puntos × 50 / nº de preguntas. Por ejemplo: <code>49 12 13 45,04/74 30,43/50</code> (aciertos, fallos, en blanco, puntos y nota sobre 50).</p>
         <ul>
           <li>Las preguntas en blanco no suman ni restan.</li>
           <li>Una pregunta con <b>más de una casilla marcada</b> cuenta como <b>fallo</b>.</li>

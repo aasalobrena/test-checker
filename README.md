@@ -6,12 +6,13 @@ Aplicación web para **corregir automáticamente exámenes tipo test** (80 pregu
 
 ## Qué hace
 
-- **Solucionarios**: escribe las respuestas correctas (`ABCD…`, también vale pegar `1A 2C 3B…`), tócalas en una cuadrícula o **escanea una hoja rellenada con las soluciones**. Número de preguntas configurable (1–80) y preguntas **anuladas** (`X` o `-`). Puedes guardar varios solucionarios y **pasarlos del ordenador al móvil con un código QR** (botón *Pasar al móvil*).
+- **Solucionarios**: eliges el tipo de examen (**Teoría**, **Inglés** o **Aptitudes**) y la fecha; si un mismo día hay varios del mismo tipo se numeran solos (1, 2…). Escribe las respuestas correctas y la app cuenta cuántas preguntas son (`ABCD…`, también vale pegar `1A 2C 3B…`), tócalas en una cuadrícula o **escanea una hoja rellenada con las soluciones**. Hasta 80 preguntas y preguntas **anuladas** (`X` o `-`). Puedes guardar varios solucionarios y **pasarlos del ordenador al móvil con un código QR** (botón *Pasar al móvil*).
 - **Opciones A–E** (también funciona con la plantilla de 4 opciones).
 - **Corrección**: escanea con la cámara (la lectura es automática al encuadrar la hoja) o sube una foto. Muestra aciertos, fallos, en blanco y la puntuación:
 
   **Puntos = aciertos − 0,33 × fallos**, sobre el número de preguntas (sin contar las anuladas).
   - Más de una casilla marcada en una pregunta = **fallo**.
+  - En **Aptitudes** se añade la nota normalizada **sobre 50**: puntos × 50 / nº de preguntas. Ejemplo de resumen: `49 12 13 45,04/74 30,43/50`.
   - Por defecto la puntuación mínima es 0 (se puede permitir negativa en *Ayuda*).
 - **Revisión**: imagen de la hoja con aciertos (verde), fallos (rojo), respuesta correcta (anillo azul) y marcas **dudosas** (naranja). Tocando una burbuja se corrige la lectura.
 - **D.N.I.**: se lee de la hoja (editable).
